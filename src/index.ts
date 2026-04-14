@@ -1,14 +1,15 @@
 // =============================================================================
-// index.ts — @heyblank-labs/json-flux v0.1.0 Public API
+// index.ts — @heyblank-labs/json-flux v0.2.0 Public API
 //
 // Flow, shape, and transform JSON effortlessly.
 //
 // Tree-shakable: import only what you need.
-//   import { flattenObject } from '@heyblank-labs/json-flux';
-//   import { extractField } from '@heyblank-labs/json-flux';
+//   import { flattenObject } from '@heyblank-labs/json-flux';          // v0.1.0 core
+//   import { toDisplayLabel } from '@heyblank-labs/json-flux';         // v0.2.0 labels
+//   import { normalizeToSections } from '@heyblank-labs/json-flux';    // v0.2.0 sections
 // =============================================================================
 
-// ── Core functions ────────────────────────────────────────────────────────────
+// ── v0.1.0 Core functions ─────────────────────────────────────────────────────
 export { flattenObject } from "./core/flatten.js";
 export { flattenArray, collectRowKeys } from "./core/array.js";
 export { removeNulls, isEmpty } from "./core/clean.js";
@@ -16,7 +17,7 @@ export { safeParse, deepSafeParse } from "./core/parse.js";
 export { collectAllKeys } from "./core/keys.js";
 export { extractField, hasField, parsePath } from "./core/extract.js";
 
-// ── Internal traversal utilities (exported for advanced usage / plugins) ─────
+// ── v0.1.0 Internal traversal utilities (exported for advanced usage / plugins)
 export {
   createTraversalContext,
   isPlainObject,
@@ -26,7 +27,7 @@ export {
   DEFAULT_DELIMITER,
 } from "./core/traversal.js";
 
-// ── General helpers ───────────────────────────────────────────────────────────
+// ── v0.1.0 General helpers ────────────────────────────────────────────────────
 export {
   deepClone,
   deepMerge,
@@ -36,23 +37,60 @@ export {
   pickKeys,
 } from "./utils/helpers.js";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── v0.2.0 Labels layer ───────────────────────────────────────────────────────
+export { toDisplayLabel, labelKeys, clearLabelCache } from "./transform/label.js";
+export { humanize, humanizeArray } from "./transform/humanize.js";
+
+// ── v0.2.0 Sections layer ─────────────────────────────────────────────────────
+export {
+  normalizeToSections,
+  flattenSectionsToFields,
+  mergeSections,
+} from "./transform/section.js";
+
+// ── v0.2.0 Utilities ─────────────────────────────────────────────────────────
+export {
+  BUILT_IN_DICTIONARY,
+  lookupDictionary,
+  isAcronym,
+} from "./utils/dictionary.js";
+export {
+  tokenize,
+  toTitleCase,
+  toSentenceCase,
+  looksLikeAcronym,
+  lastSegment,
+  unescapeKey,
+} from "./utils/string.js";
+
+// ── v0.1.0 Types ──────────────────────────────────────────────────────────────
 export type {
-  // Value types
   JsonPrimitive,
   JsonObject,
   JsonArray,
   JsonValue,
   FlatRecord,
-  // Options
   FlattenOptions,
   RemoveNullsOptions,
   SafeParseOptions,
   CollectKeysOptions,
   ExtractOptions,
-  // Results
   FlattenResult,
   CollectKeysResult,
 } from "./types/index.js";
 
 export type { FlattenArrayResult } from "./core/array.js";
+
+// ── v0.2.0 Types ──────────────────────────────────────────────────────────────
+export type {
+  FieldType,
+  Field,
+  Section,
+  CaseStyle,
+  LabelOptions,
+  HumanizeOptions,
+  SectionMapping,
+  SectionConfig,
+  NormalizationResult,
+} from "./types/section.types.js";
+
