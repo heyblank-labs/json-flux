@@ -6,7 +6,7 @@ A lightweight, TypeScript-first, framework-agnostic utility library for safely p
 
 [![npm version](https://img.shields.io/npm/v/@heyblank-labs/json-flux)](https://www.npmjs.com/package/@heyblank-labs/json-flux)
 [![license](https://img.shields.io/npm/l/@heyblank-labs/json-flux)](./LICENSE)
-[![tests](https://img.shields.io/badge/tests-316%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-447%20passing-brightgreen)]()
 [![coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)]()
 
 ---
@@ -40,12 +40,21 @@ A lightweight, TypeScript-first, framework-agnostic utility library for safely p
   - [mergeSections](#mergesectionsa-b)
   - [Built-in Dictionary](#built-in-dictionary)
   - [String Utilities](#string-utilities-advanced)
+- [v0.3.0 — Filtering & Visibility](#v030--filtering--visibility)
+  - [excludeKeys](#excludekeysobj-keys-options)
+  - [includeKeys](#includekeysobj-keys-options)
+  - [hideIf](#hideifobj-predicate-options)
+  - [stripEmpty](#stripemptyobj-options)
+  - [Built-in Predicates](#built-in-predicates)
+  - [Path Matching Engine](#path-matching-engine)
+  - [Path Utilities](#path-utilities-advanced)
 - [TypeScript Types](#typescript-types)
 - [Edge Cases & Gotchas](#edge-cases--gotchas)
 - [Security](#security)
 - [Performance](#performance)
 - [Framework Adapters](#framework-adapters)
 - [Distribution](#distribution)
+- [Roadmap](#roadmap)
 
 ---
 
@@ -117,8 +126,9 @@ const fields = flattenSectionsToFields(sections);
 
 | Version | Status | What's included |
 |---|---|---|
-| **v0.1.0** | ✅ Released | Core — flatten, parse, clean, keys, extract, helpers |
-| **v0.2.0** | ✅ Released | Labels & Sections — `toDisplayLabel`, `humanize`, `normalizeToSections` |
+| **v0.1.0** | Released | Core — flatten, parse, clean, keys, extract, helpers |
+| **v0.2.0** | Released | Labels & Sections — `toDisplayLabel`, `humanize`, `normalizeToSections` |
+| **v0.3.0** | Released | Filtering & Visibility — `excludeKeys`, `includeKeys`, `hideIf`, `stripEmpty` |
 
 ---
 
@@ -1032,6 +1042,390 @@ unescapeKey('name')   // → "name"
 
 ---
 
+---
+
+## v0.3.0 — Filtering & Visibility
+
+> Released · Fine-grained control over which fields appear in your JSON — by key name, dot-notation path, wildcard pattern, predicate function, or emptiness rules.
+
+---
+
+### `excludeKeys(obj, keys, options?)`
+
+Removes specified keys from a JSON object. Supports bare key names, exact dot-notation paths, single-wildcard `*`, double-star glob `**`, and array-index wildcards `[*]`.
+
+**Pattern syntax:**
+
+| Pattern | Matches |
+|---|---|
+| `"password"` | The key `password` at any depth |
+| `"user.address.zip"` | Exactly that dot-notation path |
+| `"user.*.secret"` | One intermediate segment: `user.profile.secret`, `user.address.secret` |
+| `"**.token"` | Any path ending in `token` at any depth |
+| `"users[*].ssn"` | `ssn` inside any element of the `users` array |
+
+```ts
+import { excludeKeys, excludeKeysDirect } from '@heyblank-labs/json-flux';
+
+// ── Bare key — removes at any depth ──────────────────────────────────────────
+excludeKeysDirect(
+  { user: { name: "Alice", password: "secret", profile: { password: "hash" } } },
+  ["password"]
+)
+// → { user: { name: "Alice", profile: {} } }
+
+// ── Exact dot path ────────────────────────────────────────────────────────────
+excludeKeysDirect(
+  { user: { address: { city: "London", zip: "SW1A 1AA" } } },
+  ["user.address.zip"]
+)
+// → { user: { address: { city: "London" } } }
+
+// ── Double-star glob — all depths ─────────────────────────────────────────────
+excludeKeysDirect(
+  { user: { token: "a", profile: { token: "b", nested: { token: "c" } } } },
+  ["**.token"]
+)
+// → { user: { profile: { nested: {} } } }
+
+// ── Array wildcard ────────────────────────────────────────────────────────────
+excludeKeysDirect(
+  { users: [{ name: "Alice", ssn: "111" }, { name: "Bob", ssn: "222" }] },
+  ["users[*].ssn"]
+)
+// → { users: [{ name: "Alice" }, { name: "Bob" }] }
+
+// ── Multiple patterns ─────────────────────────────────────────────────────────
+excludeKeysDirect(apiResponse, ["**.password", "**.token", "**.internalId"])
+```
+
+**With metadata (full result):**
+
+```ts
+const { data, removedCount, removedPaths } = excludeKeys(obj, ["**.password"]);
+// removedCount → 3
+// removedPaths → ["user.password", "user.profile.password", "admin.password"]
+```
+
+**`ExcludeOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `deep` | `boolean` | `true` | Recurse into nested objects and arrays |
+| `maxDepth` | `number` | `20` | Recursion depth limit |
+| `caseInsensitive` | `boolean` | `false` | Case-insensitive key/pattern matching |
+
+---
+
+### `includeKeys(obj, keys, options?)`
+
+Keeps only the specified keys, removing everything else. All ancestor paths of an included key are automatically preserved to maintain a valid object structure.
+
+```ts
+import { includeKeys, includeKeysDirect } from '@heyblank-labs/json-flux';
+
+// ── Bare keys — match at any depth ───────────────────────────────────────────
+includeKeysDirect(
+  { user: { name: "Alice", age: 30, secret: "x" }, meta: { name: "doc" } },
+  ["name"]
+)
+// → { user: { name: "Alice" }, meta: { name: "doc" } }
+
+// ── Exact dot paths ───────────────────────────────────────────────────────────
+includeKeysDirect(
+  { user: { name: "Alice", password: "x", address: { city: "London" } }, meta: { id: 1 } },
+  ["user.name", "user.address.city"]
+)
+// → { user: { name: "Alice", address: { city: "London" } } }
+// meta removed — not in include list
+
+// ── Entire subtree kept when path points to an object ────────────────────────
+includeKeysDirect(
+  { user: { profile: { name: "Alice", bio: "Dev" }, secret: "x" } },
+  ["user.profile"]
+)
+// → { user: { profile: { name: "Alice", bio: "Dev" } } }
+
+// ── Array wildcard ────────────────────────────────────────────────────────────
+includeKeysDirect(
+  { users: [{ id: 1, name: "Alice", token: "a" }, { id: 2, name: "Bob", token: "b" }] },
+  ["users[*].id", "users[*].name"]
+)
+// → { users: [{ id: 1, name: "Alice" }, { id: 2, name: "Bob" }] }
+```
+
+> **Important:** For fine-grained sibling exclusion within objects containing glob patterns (`**.id`), prefer explicit dot paths or combine `includeKeys` with `excludeKeys`. Deep glob patterns (`**.id`) treat all intermediate objects as potential ancestors since any nested object could contain `id`.
+
+**`IncludeOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `deep` | `boolean` | `true` | Recurse into nested objects and arrays |
+| `maxDepth` | `number` | `20` | Recursion depth limit |
+| `caseInsensitive` | `boolean` | `false` | Case-insensitive key/pattern matching |
+
+---
+
+### `hideIf(obj, predicate, options?)`
+
+Conditionally removes fields based on a predicate function. The predicate receives full context — value, key, and dot-notation path — enabling any filtering logic you can express.
+
+```ts
+import { hideIf, hideIfDirect } from '@heyblank-labs/json-flux';
+
+// ── Remove by value ───────────────────────────────────────────────────────────
+hideIfDirect(obj, (value) => value === null)
+hideIfDirect(obj, (value) => typeof value === "number" && value < 0)
+hideIfDirect(obj, (value) => Array.isArray(value) && value.length === 0)
+
+// ── Remove by key convention ──────────────────────────────────────────────────
+hideIfDirect(obj, (_value, key) => key.startsWith("_"))         // private fields
+hideIfDirect(obj, (_value, key) => key.endsWith("Internal"))    // internal fields
+
+// ── Remove by path ────────────────────────────────────────────────────────────
+hideIfDirect(obj, (_value, _key, path) => path.startsWith("debug."))
+hideIfDirect(obj, (_value, _key, path) => path.includes(".internal."))
+
+// ── Complex: remove fields where key starts with _ OR value is null ───────────
+hideIfDirect(obj, (value, key) => key.startsWith("_") || value === null)
+
+// ── Real-world example: clean API response for UI ─────────────────────────────
+const cleaned = hideIfDirect(apiResponse, (value, key, path) => {
+  if (key.startsWith("_")) return true;            // private convention
+  if (path.includes(".audit.")) return true;       // audit trail fields
+  if (value === null || value === "") return true; // empty values
+  return false;
+});
+```
+
+**With metadata:**
+
+```ts
+const { data, removedCount, removedPaths } = hideIf(
+  { name: "Alice", _id: "x", age: null },
+  (value, key) => key.startsWith("_") || value === null
+);
+// removedCount → 2
+// removedPaths → ["_id", "age"]
+```
+
+**`HideIfOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `deep` | `boolean` | `true` | Recurse into nested objects and arrays |
+| `maxDepth` | `number` | `20` | Recursion depth limit |
+| `removeEmptyParents` | `boolean` | `true` | Remove parent objects that become empty after child removal |
+
+---
+
+### `stripEmpty(obj, options?)`
+
+Removes "empty" values recursively. More configurable than `removeNulls` (v0.1.0) — with explicit control over what counts as empty, tracking of removed paths, and removal of empty arrays by default.
+
+```ts
+import { stripEmpty, stripEmptyDirect } from '@heyblank-labs/json-flux';
+
+stripEmptyDirect({
+  name: "Alice",
+  age: null,
+  bio: "",
+  score: 0,
+  active: false,
+  tags: [],
+  address: {},
+})
+// → { name: "Alice", score: 0, active: false }
+// Removed: null, "", [], {}
+// Kept: 0 and false (preserved by default)
+
+// ── Keep empty arrays ─────────────────────────────────────────────────────────
+stripEmptyDirect(obj, { preserveEmptyArrays: true })
+
+// ── Also remove 0 and false ───────────────────────────────────────────────────
+stripEmptyDirect(obj, { preserveZero: false, preserveFalse: false })
+
+// ── Keep empty strings ────────────────────────────────────────────────────────
+stripEmptyDirect(obj, { preserveEmptyStrings: true })
+```
+
+**`StripEmptyOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `preserveFalse` | `boolean` | `true` | Keep `false` boolean values |
+| `preserveZero` | `boolean` | `true` | Keep `0` numeric values |
+| `preserveEmptyStrings` | `boolean` | `false` | Keep `""` empty strings |
+| `preserveEmptyArrays` | `boolean` | `false` | Keep `[]` empty arrays |
+| `preserveEmptyObjects` | `boolean` | `false` | Keep `{}` empty objects |
+| `deep` | `boolean` | `true` | Recurse into nested objects and arrays |
+| `maxDepth` | `number` | `20` | Recursion depth limit |
+
+> **vs `removeNulls` (v0.1.0):** `stripEmpty` removes empty arrays and objects by default, tracks removed paths, and is more granularly configurable. `removeNulls` only removes empty objects by default and keeps empty arrays.
+
+---
+
+### Built-in Predicates
+
+Convenience predicates exported for use with `hideIf`:
+
+```ts
+import {
+  isNull,        // value === null
+  isNullish,     // value === null || value === undefined
+  isEmptyString, // value === ""
+  isEmptyArray,  // Array.isArray(value) && value.length === 0
+  isEmptyObject, // isPlainObject(value) && Object.keys(value).length === 0
+  isFalsy,       // !value  (catches null, undefined, false, 0, "")
+} from '@heyblank-labs/json-flux';
+
+// Use directly
+hideIfDirect(obj, isNull)
+hideIfDirect(obj, isNullish)
+hideIfDirect(obj, isFalsy)
+
+// Compose
+hideIfDirect(obj, (value, key) => isNull(value, key, "") || key.startsWith("_"))
+```
+
+---
+
+### Path Matching Engine
+
+The internal path matcher is also exported for advanced use cases — building custom filters, validating user-provided paths, or building plugin pipelines.
+
+```ts
+import { compileMatcher, compileMatchers, anyMatcherMatches } from '@heyblank-labs/json-flux';
+```
+
+#### `compileMatcher(pattern, options?)`
+
+Compiles a single pattern into a reusable `PathMatcher`. Pre-parsing makes repeated matching O(1) per node.
+
+```ts
+const m = compileMatcher("user.*.secret");
+m.matches("user.address.secret")  // → true
+m.matches("user.secret")          // → false  (* requires exactly one segment)
+m.pattern                         // → "user.*.secret"
+m.isGlob                          // → true
+
+const exact = compileMatcher("user.name");
+exact.matches("user.name")        // → true
+exact.matches("user.email")       // → false
+exact.isGlob                      // → false
+```
+
+**Pattern reference:**
+
+| Pattern | Description | Example matches |
+|---|---|---|
+| `"user.name"` | Exact path | `user.name` only |
+| `"*.name"` | One-level wildcard | `user.name`, `admin.name` |
+| `"**.name"` | Deep glob (any depth) | `name`, `a.name`, `a.b.c.name` |
+| `"users[*].email"` | Array index wildcard | `users.0.email`, `users.99.email` |
+| `"user.**.id"` | Deep glob in middle | `user.id`, `user.profile.id`, `user.a.b.id` |
+| `"**"` | Matches everything | Any path at any depth |
+
+> Patterns containing `__proto__`, `prototype`, or `constructor` throw an error immediately at compile time.
+
+#### `compileMatchers(patterns, options?)`
+
+Compiles multiple patterns, silently skipping any invalid ones:
+
+```ts
+const matchers = compileMatchers(["**.password", "**.token", "**.ssn"]);
+```
+
+#### `anyMatcherMatches(matchers, path)`
+
+Tests a path against an array of compiled matchers. Short-circuits on first match:
+
+```ts
+anyMatcherMatches(matchers, "user.password")  // → true
+anyMatcherMatches(matchers, "user.name")      // → false
+```
+
+---
+
+### Path Utilities (Advanced)
+
+Low-level path helpers exposed for plugin authors and custom filter pipelines:
+
+```ts
+import {
+  splitPath,
+  joinPath,
+  parentPath,
+  leafKey,
+  isValidPath,
+  pathContainsUnsafeKey,
+} from '@heyblank-labs/json-flux';
+```
+
+```ts
+splitPath("users[0].address.city")  // → ["users", 0, "address", "city"]
+splitPath("a.b.c")                  // → ["a", "b", "c"]
+
+joinPath("user", "address")         // → "user.address"
+joinPath("", "name")                // → "name"
+joinPath("items", 0)                // → "items.0"
+
+parentPath("user.address.city")     // → "user.address"
+parentPath("user")                  // → ""
+
+leafKey("user.address.city")        // → "city"
+
+isValidPath("user.name")            // → true
+isValidPath("__proto__")            // → false
+isValidPath("")                     // → false
+
+pathContainsUnsafeKey("user.__proto__.x") // → true
+pathContainsUnsafeKey("user.address")     // → false
+```
+
+---
+
+### Composing Filters
+
+All filter functions return plain data — chain them freely:
+
+```ts
+import {
+  deepSafeParse, removeNulls,
+  excludeKeys, includeKeys, hideIf, stripEmpty,
+  normalizeToSections, flattenSectionsToFields,
+} from '@heyblank-labs/json-flux';
+
+// Full pipeline: parse → clean → filter → humanize → sections
+const raw = await fetch('/api/customer').then(r => r.json());
+
+const result = normalizeToSections(
+  hideIfDirect(
+    excludeKeysDirect(
+      stripEmptyDirect(deepSafeParse(raw)),
+      ["**.internalId", "**.auditLog", "**.rawPayload"]
+    ),
+    (_value, key) => key.startsWith("_")
+  ),
+  {
+    sectionMap: { customer: "Customer Details", address: "Shipping Address" },
+    labels: { dob: "Date of Birth" },
+  }
+);
+```
+
+**`FilterResult<T>` — returned by all filter functions (non-direct variants):**
+
+```ts
+interface FilterResult<T> {
+  data: T;                          // the filtered value
+  removedCount: number;             // total fields removed
+  removedPaths: readonly string[];  // dot-notation paths of removed fields
+}
+```
+
+---
+
 ## TypeScript Types
 
 All types are exported and fully documented. Import exactly what you need:
@@ -1063,6 +1457,17 @@ import type {
   SectionMapping,
   SectionConfig,
   NormalizationResult,
+
+  // ── v0.3.0 Filtering types ────────────────────────────────
+  FilterPredicate,     // (value, key, path) => boolean
+  BaseFilterOptions,
+  ExcludeOptions,
+  IncludeOptions,
+  HideIfOptions,
+  StripEmptyOptions,
+  PathMatcher,
+  PathMatcherOptions,
+  FilterResult,        // { data: T, removedCount: number, removedPaths: string[] }
 } from '@heyblank-labs/json-flux';
 ```
 

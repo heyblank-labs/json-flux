@@ -1,6 +1,6 @@
 {
   "name": "@heyblank-labs/json-flux",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Flow, shape, and transform JSON effortlessly",
   "keywords": [
     "json",
@@ -15,8 +15,11 @@
     "labels",
     "sections",
     "ui-ready",
-    "camelcase",
-    "snake-case"
+    "filter",
+    "exclude",
+    "include",
+    "wildcard",
+    "glob"
   ],
   "author": "Asraf Ali <heyblank.hq@gmail.com>",
   "contributors": [
