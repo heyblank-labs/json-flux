@@ -20,7 +20,7 @@ describe("normalizeToSections — basic structure", () => {
   it("creates one section per top-level object key", () => {
     const { sections } = normalizeToSections({
       user: { name: "Alice" },
-      address: { city: "Chennai" },
+      address: { city: "London" },
     });
     expect(sections).toHaveLength(2);
     expect(sections.map((s) => s.title)).toContain("User");
@@ -129,7 +129,7 @@ describe("normalizeToSections — sectionMap", () => {
 
   it("applies object sectionMap with title", () => {
     const { sections } = normalizeToSections(
-      { address: { city: "Chennai" } },
+      { address: { city: "London" } },
       { sectionMap: { address: { title: "Postal Address" } } }
     );
     expect(sections[0]?.title).toBe("Postal Address");
@@ -173,7 +173,7 @@ describe("normalizeToSections — key filtering", () => {
     const { sections } = normalizeToSections(
       {
         user: { name: "Alice" },
-        address: { city: "Chennai" },
+        address: { city: "London" },
         meta: { id: 1 },
       },
       { includeKeys: ["user", "address"] }
@@ -224,7 +224,7 @@ describe("normalizeToSections — nested objects", () => {
     const { sections } = normalizeToSections({
       user: {
         name: "Alice",
-        address: { city: "Chennai", zip: "600001" },
+        address: { city: "London", zip: "SW1A 1AA" },
       },
     });
     const userSection = sections[0];
@@ -234,11 +234,11 @@ describe("normalizeToSections — nested objects", () => {
 
   it("subsection contains correct fields", () => {
     const { sections } = normalizeToSections({
-      user: { address: { city: "Chennai", zip: "600001" } },
+      user: { address: { city: "London", zip: "SW1A 1AA" } },
     });
     const subFields = sections[0]?.subsections[0]?.fields ?? [];
-    expect(subFields.find((f) => f.key === "city")?.value).toBe("Chennai");
-    expect(subFields.find((f) => f.key === "zip")?.value).toBe("600001");
+    expect(subFields.find((f) => f.key === "city")?.value).toBe("London");
+    expect(subFields.find((f) => f.key === "zip")?.value).toBe("SW1A 1AA");
   });
 
   it("handles array of objects as subsection list", () => {
@@ -348,7 +348,7 @@ describe("flattenSectionsToFields", () => {
 
   it("flattens nested subsections into a single array (depth-first)", () => {
     const { sections } = normalizeToSections({
-      user: { name: "Alice", address: { city: "Chennai" } },
+      user: { name: "Alice", address: { city: "London" } },
     });
     const fields = flattenSectionsToFields(sections);
     // "name" field + "city" field from subsection
@@ -444,9 +444,9 @@ describe("normalizeToSections — integration with pipeline", () => {
       },
       address: {
         line1: "123 Main St",
-        city: "Chennai",
-        zipCode: "600001",
-        country: "India",
+        city: "London",
+        zipCode: "SW1A 1AA",
+        country: "United Kingdom",
       },
       orders: [
         { orderId: "ORD-001", total: 1500 },

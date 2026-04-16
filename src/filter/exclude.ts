@@ -43,10 +43,10 @@ import { joinPath } from "../utils/path.js";
  *
  * @example
  * excludeKeys(
- *   { user: { name: "Alice", password: "secret", address: { city: "Chennai", zip: "600001" } } },
+ *   { user: { name: "Alice", password: "secret", address: { city: "London", zip: "SW1A 1AA" } } },
  *   ["password", "user.address.zip"]
  * ).data
- * // → { user: { name: "Alice", address: { city: "Chennai" } } }
+ * // → { user: { name: "Alice", address: { city: "London" } } }
  *
  * @example
  * excludeKeys(

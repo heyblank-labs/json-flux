@@ -214,10 +214,10 @@ describe("excludeKeys — basic", () => {
 
   it("excludes by exact dot path", () => {
     const { data } = excludeKeys(
-      { user: { address: { city: "Chennai", zip: "600001" } } },
+      { user: { address: { city: "London", zip: "SW1A 1AA" } } },
       ["user.address.zip"]
     );
-    expect((data as any).user.address.city).toBe("Chennai");
+    expect((data as any).user.address.city).toBe("London");
     expect((data as any).user.address.zip).toBeUndefined();
   });
 
@@ -322,10 +322,10 @@ describe("includeKeys — basic", () => {
 
   it("preserves ancestor structure for deep paths", () => {
     const { data } = includeKeys(
-      { user: { address: { city: "Chennai", zip: "600001" } }, meta: { id: 1 } },
+      { user: { address: { city: "London", zip: "SW1A 1AA" } }, meta: { id: 1 } },
       ["user.address.city"]
     );
-    expect((data as any).user.address.city).toBe("Chennai");
+    expect((data as any).user.address.city).toBe("London");
     expect((data as any).user.address.zip).toBeUndefined();
     expect((data as any).meta).toBeUndefined();
   });
@@ -433,12 +433,12 @@ describe("hideIf — basic predicate", () => {
 describe("hideIf — deep nested", () => {
   it("recurses into nested objects", () => {
     const { data } = hideIf(
-      { user: { name: "Alice", age: null, address: { city: "Chennai", zip: null } } },
+      { user: { name: "Alice", age: null, address: { city: "London", zip: null } } },
       (v) => v === null
     );
     expect((data as any).user.age).toBeUndefined();
     expect((data as any).user.address.zip).toBeUndefined();
-    expect((data as any).user.address.city).toBe("Chennai");
+    expect((data as any).user.address.city).toBe("London");
   });
 
   it("removes array items matching predicate", () => {
@@ -585,11 +585,11 @@ describe("stripEmpty — options", () => {
 describe("stripEmpty — deep cleaning", () => {
   it("removes nested nulls recursively", () => {
     const { data } = stripEmpty({
-      user: { name: "Alice", age: null, address: { city: "Chennai", zip: null } },
+      user: { name: "Alice", age: null, address: { city: "London", zip: null } },
     });
     expect((data as any).user.age).toBeUndefined();
     expect((data as any).user.address.zip).toBeUndefined();
-    expect((data as any).user.address.city).toBe("Chennai");
+    expect((data as any).user.address.city).toBe("London");
   });
 
   it("removes null items from arrays", () => {

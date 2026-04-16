@@ -37,10 +37,10 @@ import { joinPath } from "../utils/path.js";
  *
  * @example
  * includeKeys(
- *   { user: { name: "Alice", password: "x", address: { city: "Chennai" } }, meta: { id: 1 } },
+ *   { user: { name: "Alice", password: "x", address: { city: "London" } }, meta: { id: 1 } },
  *   ["user.name", "user.address.city"]
  * ).data
- * // → { user: { name: "Alice", address: { city: "Chennai" } } }
+ * // → { user: { name: "Alice", address: { city: "London" } } }
  *
  * @example
  * includeKeys(

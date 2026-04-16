@@ -66,7 +66,7 @@ const DEFAULT_CONFIG: Required<
  * @example
  * normalizeToSections({
  *   user: { firstName: "Alice", dob: "1990-01-01" },
- *   address: { city: "Chennai", zip: "600001" },
+ *   address: { city: "London", zip: "SW1A 1AA" },
  * }, {
  *   sectionMap: { user: "User Info", address: "Address Details" },
  *   labels: { dob: "Date of Birth" },

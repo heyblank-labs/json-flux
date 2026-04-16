@@ -6,7 +6,7 @@ A lightweight, TypeScript-first, framework-agnostic utility library for safely p
 
 [![npm version](https://img.shields.io/npm/v/@heyblank-labs/json-flux)](https://www.npmjs.com/package/@heyblank-labs/json-flux)
 [![license](https://img.shields.io/npm/l/@heyblank-labs/json-flux)](./LICENSE)
-[![tests](https://img.shields.io/badge/tests-447%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-598%20passing-brightgreen)]()
 [![coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)]()
 
 ---
@@ -48,6 +48,16 @@ A lightweight, TypeScript-first, framework-agnostic utility library for safely p
   - [Built-in Predicates](#built-in-predicates)
   - [Path Matching Engine](#path-matching-engine)
   - [Path Utilities](#path-utilities-advanced)
+- [v0.4.0 — Value Transformation](#v040--value-transformation)
+  - [transformValues](#transformvaluesobj-config)
+  - [formatDate](#formatdatevalue-options)
+  - [formatCurrency](#formatcurrencyvalue-options)
+  - [formatBoolean](#formatbooleanvalue-options)
+  - [formatNumber](#formatnumbervalue-options)
+  - [formatEnum](#formatenumvalue-options)
+  - [detectType](#detecttypevalue)
+  - [applyDefaults](#applydefaultsobj-defaults-options)
+  - [injectComputedFields](#injectcomputedfieldsobj-computed)
 - [TypeScript Types](#typescript-types)
 - [Edge Cases & Gotchas](#edge-cases--gotchas)
 - [Security](#security)
@@ -129,6 +139,7 @@ const fields = flattenSectionsToFields(sections);
 | **v0.1.0** | Released | Core — flatten, parse, clean, keys, extract, helpers |
 | **v0.2.0** | Released | Labels & Sections — `toDisplayLabel`, `humanize`, `normalizeToSections` |
 | **v0.3.0** | Released | Filtering & Visibility — `excludeKeys`, `includeKeys`, `hideIf`, `stripEmpty` |
+| **v0.4.0** | Released | Value Transformation — `transformValues`, formatters, computed fields, type detection |
 
 ---
 
@@ -362,7 +373,7 @@ import { extractField } from '@heyblank-labs/json-flux';
 const data = {
   users: [
     { id: 1, address: { city: 'London' } },
-    { id: 2, address: { city: 'Mumbai'  } },
+    { id: 2, address: { city: 'Birmingham'  } },
   ],
 };
 
@@ -1426,6 +1437,394 @@ interface FilterResult<T> {
 
 ---
 
+## v0.4.0 — Value Transformation
+
+> Released · Format, map, compute, and enrich JSON values — making data display-ready without any UI dependencies.
+
+---
+
+### `transformValues(obj, config?)`
+
+The core engine. Transforms values in a JSON object in a single traversal pass using this pipeline:
+
+1. **`defaults`** — fill `null`/`undefined` fields with fallback values
+2. **`transforms`** — apply per-path transformers (date, currency, boolean, enum, custom…)
+3. **`autoFormat`** — auto-detect and format unspecified fields (optional)
+4. **`computed`** — inject virtual fields derived from the full object
+
+```ts
+import { transformValues, transformValuesDirect } from '@heyblank-labs/json-flux';
+
+const { data, transformedPaths, defaultedPaths, computedPaths } = transformValues({
+  customer: {
+    firstName: "Alice",
+    lastName:  "Smith",
+    dob:       "1990-01-15",
+    salary:    75000,
+    active:    true,
+    status:    "APPROVED",
+    middleName: null,
+  },
+}, {
+  transforms: {
+    "customer.dob":    { type: "date",     options: { format: "DD MMM YYYY" } },
+    "customer.salary": { type: "currency", options: { currency: "INR", locale: "en-IN" } },
+    "customer.active": { type: "boolean",  options: { trueLabel: "Active", falseLabel: "Inactive" } },
+    "customer.status": { type: "enum",     options: {
+      map: { APPROVED: "Approved", PENDING: "Pending", REJECTED: "Rejected" }
+    }},
+  },
+  computed: {
+    "customer.fullName": (root) =>
+      `${(root as any).customer.firstName} ${(root as any).customer.lastName}`,
+  },
+  defaults: {
+    "customer.middleName": "N/A",
+  },
+});
+
+// data.customer →
+// {
+//   firstName:  "Alice",
+//   lastName:   "Smith",
+//   dob:        "15 Jan 1990",
+//   salary:     "₹75,000.00",
+//   active:     "Active",
+//   status:     "Approved",
+//   fullName:   "Alice Smith",     ← computed
+//   middleName: "N/A",             ← defaulted
+// }
+```
+
+**Custom function transformer:**
+
+```ts
+transformValuesDirect(data, {
+  transforms: {
+    "user.age":    (value) => `${value} years`,
+    "user.score":  (value, key, path, parent) =>
+      `${value}/${(parent as any).maxScore}`,
+  }
+})
+```
+
+**Wildcard patterns in transform paths:**
+
+```ts
+transformValuesDirect(data, {
+  transforms: {
+    "**.amount":    { type: "currency" },   // all nested amounts
+    "orders[*].dob": { type: "date" },       // dob in every order item
+    "active":       { type: "boolean" },    // active at any depth
+  }
+})
+```
+
+**`TransformValuesConfig`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `transforms` | `Record<string, TransformConfig>` | — | Path/key → transform mapping |
+| `computed` | `Record<string, ComputedFieldFn>` | — | Virtual fields to inject |
+| `defaults` | `Record<string, JsonValue>` | — | Fallback values for null/missing |
+| `maxDepth` | `number` | `20` | Recursion depth limit |
+| `autoFormat` | `boolean` | `false` | Auto-detect and format all unspecified fields |
+
+**`TransformResult<T>`:**
+
+```ts
+{
+  data: T;                              // transformed object
+  transformedPaths: readonly string[];  // paths where a transform was applied
+  defaultedPaths: readonly string[];    // paths that received a default value
+  computedPaths: readonly string[];     // paths of injected virtual fields
+}
+```
+
+---
+
+### `TransformConfig` — per-path configuration
+
+Each key in `transforms` accepts one of these forms:
+
+```ts
+// Built-in formatters
+{ type: "date",     options?: DateFormatterOptions }
+{ type: "currency", options?: CurrencyFormatterOptions }
+{ type: "boolean",  options?: BooleanFormatterOptions }
+{ type: "number",   options?: NumberFormatterOptions }
+{ type: "enum",     options: EnumFormatterOptions }
+
+// Fill null with a default value
+{ type: "default",  value: JsonValue }
+
+// Auto-detect type and format
+{ type: "auto" }
+
+// Raw function
+(value, key, path, parent) => JsonValue
+```
+
+---
+
+### `formatDate(value, options?)`
+
+Formats date values (ISO strings, timestamps, Date objects) into configurable display strings. Zero dependencies — uses native `Date` parsing.
+
+```ts
+import { formatDate, createDateFormatter } from '@heyblank-labs/json-flux';
+
+formatDate("2024-01-15")                                  // → "15 Jan 2024"
+formatDate("2024-01-15", { format: "DD/MM/YYYY" })        // → "15/01/2024"
+formatDate("2024-01-15", { format: "MMMM D, YYYY" })      // → "January 15, 2024"
+formatDate("2024-01-15", { format: "YYYY-MM-DD" })        // → "2024-01-15"
+formatDate(1705276800000)                                  // → "15 Jan 2024"
+formatDate("not-a-date")                                  // → "—"
+formatDate("2024-01-15", { locale: "de-DE", format: "DD. MMMM YYYY" })
+// → "15. Januar 2024"
+```
+
+**Format tokens:**
+
+| Token | Output | Example |
+|---|---|---|
+| `YYYY` | Full year | `2024` |
+| `YY` | 2-digit year | `24` |
+| `MMMM` | Full month name | `January` |
+| `MMM` | Short month name | `Jan` |
+| `MM` | Zero-padded month | `01` |
+| `DD` | Zero-padded day | `05` |
+| `D` | Unpadded day | `5` |
+| `HH` | 24h hour | `14` |
+| `hh` | 12h hour | `02` |
+| `mm` | Minutes | `30` |
+| `ss` | Seconds | `07` |
+| `A` | AM/PM | `PM` |
+
+**`DateFormatterOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `format` | `string` | `"DD MMM YYYY"` | Output format string |
+| `locale` | `string` | `"en-US"` | BCP 47 locale for month names |
+| `fallback` | `string` | `"—"` | Returned when input cannot be parsed |
+| `timestampMs` | `boolean` | `true` | Treat numeric input as milliseconds |
+
+---
+
+### `formatCurrency(value, options?)`
+
+Formats numbers as localised currency strings using `Intl.NumberFormat`.
+
+```ts
+import { formatCurrency, createCurrencyFormatter } from '@heyblank-labs/json-flux';
+
+formatCurrency(1500)                                            // → "$1,500.00"
+formatCurrency(1500, { currency: "INR", locale: "en-IN" })     // → "₹1,500.00"
+formatCurrency(1500, { currency: "EUR", locale: "de-DE" })     // → "1.500,00 €"
+formatCurrency(1500, { currency: "GBP", locale: "en-GB" })     // → "£1,500.00"
+formatCurrency("abc")                                          // → "—"
+
+// Reusable formatter (efficient for batch use)
+const fmt = createCurrencyFormatter({ currency: "INR", locale: "en-IN" });
+fmt(75000)   // → "₹75,000.00"
+fmt(150000)  // → "₹1,50,000.00"
+```
+
+**`CurrencyFormatterOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `currency` | `string` | `"USD"` | ISO 4217 currency code |
+| `locale` | `string` | `"en-US"` | BCP 47 locale |
+| `decimals` | `number` | `2` | Decimal places |
+| `showSymbol` | `boolean` | `true` | Symbol (`$`) vs code (`USD`) |
+| `fallback` | `string` | `"—"` | Returned for non-numeric input |
+
+---
+
+### `formatBoolean(value, options?)`
+
+Converts boolean values — and boolean-like strings/numbers — to configurable display labels.
+
+```ts
+import { formatBoolean, createBooleanFormatter } from '@heyblank-labs/json-flux';
+
+formatBoolean(true)                                 // → "Yes"
+formatBoolean(false)                                // → "No"
+formatBoolean(null)                                 // → "—"
+formatBoolean("yes")                                // → "Yes"
+formatBoolean("false")                              // → "No"
+formatBoolean(1)                                    // → "Yes"
+formatBoolean(0)                                    // → "No"
+formatBoolean(true, { trueLabel: "Active" })        // → "Active"
+formatBoolean(false, { falseLabel: "Inactive" })    // → "Inactive"
+```
+
+Recognised string inputs: `"true"/"false"`, `"yes"/"no"`, `"1"/"0"`, `"on"/"off"` (case-insensitive).
+
+---
+
+### `formatNumber(value, options?)`
+
+Locale-aware number formatting with decimal control.
+
+```ts
+import { formatNumber, createNumberFormatter } from '@heyblank-labs/json-flux';
+
+formatNumber(1234567.89)                                        // → "1,234,567.89"
+formatNumber(1234567, { locale: "de-DE" })                     // → "1.234.567"
+formatNumber(1234567, { locale: "en-IN" })                     // → "12,34,567"
+formatNumber(3.14159, { maximumFractionDigits: 2 })            // → "3.14"
+formatNumber("abc")                                            // → "—"
+```
+
+---
+
+### `formatEnum(value, options)`
+
+Maps raw enum values to human-readable display labels.
+
+```ts
+import { formatEnum, createEnumFormatter } from '@heyblank-labs/json-flux';
+
+const statusOptions = {
+  map: {
+    PENDING:  "Pending Approval",
+    APPROVED: "Approved",
+    REJECTED: "Rejected",
+    DRAFT:    "Draft",
+  }
+};
+
+formatEnum("PENDING", statusOptions)              // → "Pending Approval"
+formatEnum("APPROVED", statusOptions)             // → "Approved"
+formatEnum("UNKNOWN", statusOptions)              // → "UNKNOWN"  (original value)
+formatEnum("UNKNOWN", { ...statusOptions, fallback: "N/A" }) // → "N/A"
+formatEnum("pending", { ...statusOptions, caseInsensitive: true }) // → "Pending Approval"
+```
+
+**`EnumFormatterOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `map` | `Record<string, string>` | Required | Enum value → display label |
+| `fallback` | `string` | original value | Returned when key not found in map |
+| `caseInsensitive` | `boolean` | `false` | Case-insensitive key matching |
+
+---
+
+### `detectType(value)`
+
+Auto-detects the semantic type of any value with a confidence score.
+
+```ts
+import { detectType, isDateLike, isNumericLike } from '@heyblank-labs/json-flux';
+
+detectType("2024-01-15")         // → { type: "date",    confidence: 0.95 }
+detectType("alice@example.com")  // → { type: "email",   confidence: 0.9 }
+detectType("https://example.com")// → { type: "url",     confidence: 0.95 }
+detectType(true)                 // → { type: "boolean", confidence: 1 }
+detectType(42)                   // → { type: "number",  confidence: 1 }
+detectType(null)                 // → { type: "null",    confidence: 1 }
+detectType([1, 2, 3])            // → { type: "array",   confidence: 1 }
+detectType({ a: 1 })             // → { type: "object",  confidence: 1 }
+
+// Helpers
+isDateLike("2024-01-15")         // → true
+isNumericLike("42.5")            // → true
+```
+
+**`DetectedType` values:** `"string"` | `"number"` | `"boolean"` | `"null"` | `"array"` | `"object"` | `"date"` | `"email"` | `"url"` | `"phone"` | `"currency"`
+
+---
+
+### `applyDefaults(obj, defaults, options?)`
+
+Fills `null`/`undefined` fields with fallback values. Supports dot paths, bare keys, and wildcard patterns.
+
+```ts
+import { applyDefaults } from '@heyblank-labs/json-flux';
+
+const { data, defaultedPaths } = applyDefaults(
+  { user: { name: "Alice", age: null, role: undefined } },
+  {
+    "user.age":  0,
+    "user.role": "viewer",
+    "user.bio":  "N/A",    // injected even if key is missing
+  }
+);
+// data.user → { name: "Alice", age: 0, role: "viewer", bio: "N/A" }
+```
+
+> Does **not** overwrite existing values — only fills `null` and `undefined`.
+
+---
+
+### `injectComputedFields(obj, computed)`
+
+Injects virtual/derived fields computed from the full root object.
+
+```ts
+import { injectComputedFields } from '@heyblank-labs/json-flux';
+
+const { data, computedPaths } = injectComputedFields(
+  { user: { firstName: "Alice", lastName: "Smith", salary: 75000, tax: 7500 } },
+  {
+    "user.fullName":    (root) => `${(root as any).user.firstName} ${(root as any).user.lastName}`,
+    "user.netSalary":  (root) => (root as any).user.salary - (root as any).user.tax,
+    "user.initials":   (root) =>
+      `${(root as any).user.firstName[0]}.${(root as any).user.lastName[0]}.`,
+  }
+);
+// data.user.fullName   → "Alice Smith"
+// data.user.netSalary  → 67500
+// data.user.initials   → "A.S."
+```
+
+The compute function receives a **frozen snapshot** of the root object at the time of injection. Compute functions that throw return `null` as a safe fallback.
+
+---
+
+### Composing v0.4.0 with Previous Versions
+
+```ts
+import {
+  deepSafeParse, removeNulls,
+  excludeKeysDirect,
+  normalizeToSections, flattenSectionsToFields,
+  transformValuesDirect,
+} from '@heyblank-labs/json-flux';
+
+// Full pipeline: parse → clean → filter → transform → sections
+const raw = await fetch('/api/orders').then(r => r.json());
+
+const sections = normalizeToSections(
+  transformValuesDirect(
+    excludeKeysDirect(
+      removeNulls(deepSafeParse(raw)),
+      ["**.internalId", "**.auditLog"]
+    ),
+    {
+      transforms: {
+        "**.date":     { type: "date", options: { format: "DD MMM YYYY" } },
+        "**.amount":   { type: "currency", options: { currency: "INR" } },
+        "**.active":   { type: "boolean" },
+        "**.status":   { type: "enum", options: {
+          map: { PENDING: "Pending", APPROVED: "Approved" }
+        }},
+      },
+      computed: {
+        "meta.processedAt": () => new Date().toISOString(),
+      },
+    }
+  ),
+  { sectionMap: { orders: "Order History" } }
+).sections;
+```
+
+---
+
 ## TypeScript Types
 
 All types are exported and fully documented. Import exactly what you need:
@@ -1468,6 +1867,21 @@ import type {
   PathMatcher,
   PathMatcherOptions,
   FilterResult,        // { data: T, removedCount: number, removedPaths: string[] }
+
+  // ── v0.4.0 Value Transformation types ────────────────────
+  ValueTransformer,    // (value, key, path, parent) => JsonValue
+  ComputedFieldFn,     // (root) => JsonValue
+  DetectedType,        // "string" | "number" | "boolean" | "null" | "date" | "email" | "url" | ...
+  TypeDetectionResult, // { type: DetectedType, confidence: number, normalised?: string }
+  DateFormatterOptions,
+  CurrencyFormatterOptions,
+  BooleanFormatterOptions,
+  NumberFormatterOptions,
+  EnumMap,
+  EnumFormatterOptions,
+  TransformConfig,     // { type: "date"|"currency"|"boolean"|"enum"|... } | ValueTransformer
+  TransformValuesConfig,
+  TransformResult,     // { data: T, transformedPaths, defaultedPaths, computedPaths }
 } from '@heyblank-labs/json-flux';
 ```
 
@@ -1517,6 +1931,9 @@ All traversals are O(n) in the number of nodes.
 | `removeNulls` | 5,000 keys | < 100ms |
 | `toDisplayLabel` | repeated calls | O(1) — memoised |
 | `normalizeToSections` | 500-field payload | < 50ms |
+| `transformValues` | 1,000-item array | < 300ms |
+| `formatDate` | repeated calls | O(1) — month names cached per locale |
+| `formatCurrency` | repeated calls | O(1) — `Intl.NumberFormat` cached per config |
 
 **Label memoisation:** `toDisplayLabel` caches results in an LRU cache (2,000 entries, keyed by key + options fingerprint). Repeated calls for the same key are O(1) with zero re-processing.
 

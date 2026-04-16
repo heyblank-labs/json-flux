@@ -153,10 +153,10 @@ describe("humanize — flatten mode", () => {
 
   it("flattens deeply nested structures", () => {
     const result = humanize(
-      { company: { address: { city: "Chennai" } } },
+      { company: { address: { city: "London" } } },
       { flatten: true }
     );
-    expect(result["Company Address City"]).toBe("Chennai");
+    expect(result["Company Address City"]).toBe("London");
   });
 
   it("handles primitive arrays in flatten mode", () => {

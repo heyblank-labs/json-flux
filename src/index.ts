@@ -1,12 +1,8 @@
 // =============================================================================
-// index.ts — @heyblank-labs/json-flux v0.3.0 Public API
+// index.ts — @heyblank-labs/json-flux v0.4.0 Public API
 //
 // Flow, shape, and transform JSON effortlessly.
-//
 // Tree-shakable: import only what you need.
-//   import { flattenObject }       from '@heyblank-labs/json-flux'; // v0.1.0
-//   import { toDisplayLabel }      from '@heyblank-labs/json-flux'; // v0.2.0
-//   import { excludeKeys, hideIf } from '@heyblank-labs/json-flux'; // v0.3.0
 // =============================================================================
 
 // ── v0.1.0 Core functions ─────────────────────────────────────────────────────
@@ -17,7 +13,7 @@ export { safeParse, deepSafeParse } from "./core/parse.js";
 export { collectAllKeys } from "./core/keys.js";
 export { extractField, hasField, parsePath } from "./core/extract.js";
 
-// ── v0.1.0 Internal traversal utilities (exported for advanced usage / plugins)
+// ── v0.1.0 Internal traversal utilities ──────────────────────────────────────
 export {
   createTraversalContext,
   isPlainObject,
@@ -69,7 +65,6 @@ export { includeKeys, includeKeysDirect } from "./filter/include.js";
 export {
   hideIf,
   hideIfDirect,
-  // Built-in predicates
   isNull,
   isNullish,
   isEmptyString,
@@ -78,11 +73,7 @@ export {
   isFalsy,
 } from "./filter/conditional.js";
 export { stripEmpty, stripEmptyDirect } from "./filter/strip.js";
-
-// ── v0.3.0 Path matching engine (advanced / plugin use) ─────────────────────
 export { compileMatcher, compileMatchers, anyMatcherMatches } from "./filter/matcher.js";
-
-// ── v0.3.0 Path utilities (advanced / plugin use) ───────────────────────────
 export {
   splitPath,
   joinPath,
@@ -91,6 +82,23 @@ export {
   isValidPath,
   pathContainsUnsafeKey,
 } from "./utils/path.js";
+
+// ── v0.4.0 Value Transformation layer ────────────────────────────────────────
+export { transformValues, transformValuesDirect } from "./value/transform.js";
+export { applyDefaults } from "./value/defaults.js";
+export { injectComputedFields } from "./value/computed.js";
+export { detectType, isDateLike, isNumericLike } from "./value/detect.js";
+
+// ── v0.4.0 Built-in formatters ───────────────────────────────────────────────
+export { formatDate, createDateFormatter } from "./value/formatters/date.js";
+export { formatCurrency, createCurrencyFormatter } from "./value/formatters/currency.js";
+export {
+  formatBoolean,
+  createBooleanFormatter,
+  formatNumber,
+  createNumberFormatter,
+} from "./value/formatters/boolean.js";
+export { formatEnum, createEnumFormatter } from "./value/formatters/enum.js";
 
 // ── v0.1.0 Types ──────────────────────────────────────────────────────────────
 export type {
@@ -136,4 +144,19 @@ export type {
   FilterResult,
 } from "./types/filter.types.js";
 
-
+// ── v0.4.0 Types ──────────────────────────────────────────────────────────────
+export type {
+  ValueTransformer,
+  ComputedFieldFn,
+  DetectedType,
+  TypeDetectionResult,
+  DateFormatterOptions,
+  CurrencyFormatterOptions,
+  BooleanFormatterOptions,
+  NumberFormatterOptions,
+  EnumMap,
+  EnumFormatterOptions,
+  TransformConfig,
+  TransformValuesConfig,
+  TransformResult,
+} from "./types/value.types.js";
