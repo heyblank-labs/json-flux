@@ -6,7 +6,7 @@ A lightweight, TypeScript-first, framework-agnostic utility library for safely p
 
 [![npm version](https://img.shields.io/npm/v/@heyblank-labs/json-flux)](https://www.npmjs.com/package/@heyblank-labs/json-flux)
 [![license](https://img.shields.io/npm/l/@heyblank-labs/json-flux)](./LICENSE)
-[![tests](https://img.shields.io/badge/tests-598%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-744%20passing-brightgreen)]()
 [![coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)]()
 
 ---
@@ -58,13 +58,19 @@ A lightweight, TypeScript-first, framework-agnostic utility library for safely p
   - [detectType](#detecttypevalue)
   - [applyDefaults](#applydefaultsobj-defaults-options)
   - [injectComputedFields](#injectcomputedfieldsobj-computed)
+- [v0.5.0 — Structural Transformation](#v050--structural-transformation)
+  - [unflatten](#unflattenflat-options)
+  - [remapObject](#remapobjectobj-mapping-options)
+  - [mergeDeep](#mergedeepsource1-source2-rest-options)
+  - [pivotStructure](#pivotstructureinput-direction-options)
+  - [normalizeKeys](#normalizekeysobj-options)
+  - [convertKeyCase](#convertkeycasekey-targetcase)
 - [TypeScript Types](#typescript-types)
 - [Edge Cases & Gotchas](#edge-cases--gotchas)
 - [Security](#security)
 - [Performance](#performance)
 - [Framework Adapters](#framework-adapters)
 - [Distribution](#distribution)
-- [Roadmap](#roadmap)
 
 ---
 
@@ -140,6 +146,7 @@ const fields = flattenSectionsToFields(sections);
 | **v0.2.0** | Released | Labels & Sections — `toDisplayLabel`, `humanize`, `normalizeToSections` |
 | **v0.3.0** | Released | Filtering & Visibility — `excludeKeys`, `includeKeys`, `hideIf`, `stripEmpty` |
 | **v0.4.0** | Released | Value Transformation — `transformValues`, formatters, computed fields, type detection |
+| **v0.5.0** | Released | Structural Transformation — `unflatten`, `remapObject`, `mergeDeep`, `pivotStructure`, `normalizeKeys` |
 
 ---
 
@@ -1488,7 +1495,7 @@ const { data, transformedPaths, defaultedPaths, computedPaths } = transformValue
 //   firstName:  "Alice",
 //   lastName:   "Smith",
 //   dob:        "15 Jan 1990",
-//   salary:     "₹75,000.00",
+//   salary:     "£75,000.00",
 //   active:     "Active",
 //   status:     "Approved",
 //   fullName:   "Alice Smith",     ← computed
@@ -1619,16 +1626,16 @@ Formats numbers as localised currency strings using `Intl.NumberFormat`.
 ```ts
 import { formatCurrency, createCurrencyFormatter } from '@heyblank-labs/json-flux';
 
-formatCurrency(1500)                                            // → "$1,500.00"
+formatCurrency(1500)                                           // → "$1,500.00"
 formatCurrency(1500, { currency: "INR", locale: "en-IN" })     // → "₹1,500.00"
 formatCurrency(1500, { currency: "EUR", locale: "de-DE" })     // → "1.500,00 €"
 formatCurrency(1500, { currency: "GBP", locale: "en-GB" })     // → "£1,500.00"
 formatCurrency("abc")                                          // → "—"
 
 // Reusable formatter (efficient for batch use)
-const fmt = createCurrencyFormatter({ currency: "INR", locale: "en-IN" });
-fmt(75000)   // → "₹75,000.00"
-fmt(150000)  // → "₹1,50,000.00"
+const fmt = createCurrencyFormatter({ currency: "GBP", locale: "en-GB" });
+fmt(75000)   // → "£75,000.00"
+fmt(150000)  // → "£150,000.00"
 ```
 
 **`CurrencyFormatterOptions`:**
@@ -1825,6 +1832,312 @@ const sections = normalizeToSections(
 
 ---
 
+---
+
+## v0.5.0 — Structural Transformation
+
+> Released · Reshape, reconstruct, and standardize JSON structures — unflatten dot-notation records, remap paths, deep-merge with array strategies, pivot between arrays and objects, and normalize all keys to a consistent case format.
+
+---
+
+### `unflatten(flat, options?)`
+
+Reconstructs a nested JSON object from a flat dot/bracket-notation record. The inverse of `flattenObject`.
+
+```ts
+import { unflatten } from '@heyblank-labs/json-flux';
+
+// Basic reconstruction
+unflatten({
+  "user.name": "Alice",
+  "user.address.city": "London",
+  "user.address.zip": "SW1A 1AA",
+})
+// → { user: { name: "Alice", address: { city: "London", zip: "SW1A 1AA" } } }
+
+// Array reconstruction
+unflatten({
+  "users.0.name": "Alice",
+  "users.1.name": "Bob",
+})
+// → { users: [{ name: "Alice" }, { name: "Bob" }] }
+
+// Bracket notation arrays
+unflatten({ "items[0].id": 1, "items[1].id": 2 })
+// → { items: [{ id: 1 }, { id: 2 }] }
+
+// Custom delimiter
+unflatten({ "user/name": "Alice" }, { delimiter: "/" })
+// → { user: { name: "Alice" } }
+
+// Round-trip with flattenObject
+const { data: flat } = flattenObject(original);
+const reconstructed = unflatten(flat); // ≡ original
+```
+
+**`UnflattenOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `delimiter` | `string` | `"."` | Delimiter used in flat keys |
+| `parseArrays` | `boolean` | `true` | Reconstruct arrays from numeric bracket segments |
+| `maxDepth` | `number` | `20` | Maximum depth of reconstructed structure |
+
+---
+
+### `remapObject(obj, mapping, options?)`
+
+Transforms an object's structure by mapping source dot-notation paths to target dot-notation paths.
+
+```ts
+import { remapObject } from '@heyblank-labs/json-flux';
+
+// Deep path restructuring
+remapObject(
+  { user: { name: "Alice", age: 30 }, meta: { id: 1 } },
+  {
+    "user.name": "profile.fullName",
+    "user.age":  "profile.details.age",
+    "meta.id":   "id",
+  }
+)
+// → { profile: { fullName: "Alice", details: { age: 30 } }, id: 1 }
+
+// Collapse deep → flat
+remapObject(
+  { user: { profile: { name: "Alice" } } },
+  { "user.profile.name": "name" }
+)
+// → { name: "Alice" }
+
+// Expand flat → deep
+remapObject(
+  { id: 1, name: "Alice" },
+  { id: "user.meta.id", name: "user.profile.name" }
+)
+// → { user: { meta: { id: 1 }, profile: { name: "Alice" } } }
+
+// Keep unmapped fields
+remapObject({ a: 1, b: 2, c: 3 }, { a: "x" }, { keepUnmapped: true })
+// → { x: 1, b: 2, c: 3 }
+
+// Default for missing source path
+remapObject(
+  { user: { name: "Alice" } },
+  { "user.name": "name", "user.email": "email" },
+  { defaultValue: "N/A" }
+)
+// → { name: "Alice", email: "N/A" }
+```
+
+**`RemapOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `keepUnmapped` | `boolean` | `false` | Carry over fields not in mapping |
+| `defaultValue` | `JsonValue` | — | Value for missing source paths |
+| `maxDepth` | `number` | `20` | Recursion depth for source reads |
+
+---
+
+### `mergeDeep(source1, source2, ...rest, options?)`
+
+Deep-merges two or more objects. Later sources win on key conflicts. Arrays are merged according to `arrayStrategy`.
+
+```ts
+import { mergeDeep } from '@heyblank-labs/json-flux';
+
+// Basic deep merge
+mergeDeep(
+  { user: { name: "Alice", role: "user" } },
+  { user: { role: "admin" }, active: true }
+)
+// → { user: { name: "Alice", role: "admin" }, active: true }
+
+// Three-way merge
+mergeDeep({ a: 1 }, { b: 2 }, { c: 3 })
+// → { a: 1, b: 2, c: 3 }
+
+// Array strategies
+mergeDeep({ tags: ["a", "b"] }, { tags: ["c"] })
+// → { tags: ["c"] }  (replace — default)
+
+mergeDeep({ tags: ["a", "b"] }, { tags: ["c"] }, { arrayStrategy: "concat" })
+// → { tags: ["a", "b", "c"] }
+
+mergeDeep(
+  { tags: ["a", "b", "c"] },
+  { tags: ["b", "c", "d"] },
+  { arrayStrategy: "unique" }
+)
+// → { tags: ["a", "b", "c", "d"] }
+```
+
+**`MergeDeepOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `arrayStrategy` | `"replace" \| "concat" \| "unique"` | `"replace"` | How arrays are merged |
+| `maxDepth` | `number` | `20` | Recursion depth limit |
+
+---
+
+### `pivotStructure(input, direction, options?)`
+
+Converts between array ↔ keyed-object representations.
+
+```ts
+import { pivotStructure, arrayToObject, objectToArray } from '@heyblank-labs/json-flux';
+
+// Array → Object (keyed by a field)
+pivotStructure(
+  [{ id: "u1", name: "Alice" }, { id: "u2", name: "Bob" }],
+  "arrayToObject",
+  { keyField: "id" }
+)
+// → { u1: { name: "Alice" }, u2: { name: "Bob" } }
+
+// Object → Array (inject original key as a field)
+pivotStructure(
+  { u1: { name: "Alice" }, u2: { name: "Bob" } },
+  "objectToArray",
+  { keyName: "userId" }
+)
+// → [{ userId: "u1", name: "Alice" }, { userId: "u2", name: "Bob" }]
+```
+
+**`PivotOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `keyField` | `string` | — | Field to use as key for `arrayToObject` (required) |
+| `keyName` | `string` | `"key"` | Field name for original key in `objectToArray` |
+| `valueName` | `string` | `"value"` | Field name for primitive values in `objectToArray` |
+
+---
+
+### `normalizeKeys(obj, options?)`
+
+Recursively normalizes all object keys to a consistent case format. Handles camelCase, snake_case, PascalCase, kebab-case, SCREAMING_SNAKE, and mixed formats automatically.
+
+```ts
+import { normalizeKeys } from '@heyblank-labs/json-flux';
+
+// Mixed → camelCase (default)
+normalizeKeys({
+  firstName: "Alice",
+  last_name: "Smith",
+  "middle-name": "B",
+  UserAge: 30,
+  API_KEY: "secret",
+})
+// → { firstName: "Alice", lastName: "Smith", middleName: "B", userAge: 30, apiKey: "secret" }
+
+// → snake_case
+normalizeKeys({ firstName: "Alice", UserAge: 30 }, { case: "snake" })
+// → { first_name: "Alice", user_age: 30 }
+
+// → PascalCase
+normalizeKeys({ first_name: "Alice", api_key: "abc" }, { case: "pascal" })
+// → { FirstName: "Alice", ApiKey: "abc" }
+
+// → kebab-case
+normalizeKeys({ firstName: "Alice", userId: 1 }, { case: "kebab" })
+// → { "first-name": "Alice", "user-id": 1 }
+
+// Deep (default) — recurses into nested objects and arrays
+normalizeKeys({
+  user_data: {
+    first_name: "Alice",
+    address_info: { zip_code: "SW1A 1AA" },
+  },
+})
+// → { userData: { firstName: "Alice", addressInfo: { zipCode: "SW1A 1AA" } } }
+
+// Custom map overrides
+normalizeKeys(
+  { user_id: 1, first_name: "Alice" },
+  { case: "camel", customMap: { user_id: "userId" } }
+)
+// → { userId: 1, firstName: "Alice" }
+```
+
+**Key transformation examples:**
+
+| Input key | camel | snake | pascal | kebab |
+|---|---|---|---|---|
+| `first_name` | `firstName` | `first_name` | `FirstName` | `first-name` |
+| `APIKey` | `apiKey` | `api_key` | `ApiKey` | `api-key` |
+| `userID` | `userId` | `user_id` | `UserId` | `user-id` |
+| `XMLParser` | `xmlParser` | `xml_parser` | `XmlParser` | `xml-parser` |
+| `SCREAMING_SNAKE` | `screamingSnake` | `screaming_snake` | `ScreamingSnake` | `screaming-snake` |
+
+**`NormalizeKeysOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `case` | `"camel" \| "snake" \| "pascal" \| "kebab"` | `"camel"` | Target case format |
+| `deep` | `boolean` | `true` | Recurse into nested objects and arrays |
+| `customMap` | `Record<string, string>` | — | Explicit key overrides applied first |
+| `maxDepth` | `number` | `20` | Recursion depth limit |
+
+> **Performance:** Key conversions are memoised in an LRU cache (2,000 entries per unique key+case pair). Repeated normalization calls for the same keys are O(1). Call `clearCaseCache()` to reset.
+
+---
+
+### `convertKeyCase(key, targetCase)`
+
+Converts a single key to the target case. Cached for performance. Used internally by `normalizeKeys`.
+
+```ts
+import { convertKeyCase } from '@heyblank-labs/json-flux';
+
+convertKeyCase("first_name", "camel")   // → "firstName"
+convertKeyCase("API_KEY",    "camel")   // → "apiKey"
+convertKeyCase("firstName",  "snake")   // → "first_name"
+convertKeyCase("UserProfile","kebab")   // → "user-profile"
+convertKeyCase("XMLParser",  "pascal")  // → "XmlParser"
+```
+
+---
+
+### Composing v0.5.0 with Previous Versions
+
+```ts
+import {
+  deepSafeParse, removeNulls,
+  excludeKeysDirect,
+  normalizeKeys,
+  transformValuesDirect,
+  normalizeToSections, flattenSectionsToFields,
+} from '@heyblank-labs/json-flux';
+
+// Real-world pipeline: legacy API response → clean UI sections
+const raw = await fetch('/api/legacy').then(r => r.json());
+
+const sections = normalizeToSections(
+  transformValuesDirect(
+    normalizeKeys(
+      excludeKeysDirect(
+        removeNulls(deepSafeParse(raw)),
+        ["**.internal_id", "**.audit_log"]
+      ),
+      { case: "camel" }        // normalize all snake_case keys to camelCase
+    ),
+    {
+      transforms: {
+        "**.dob":    { type: "date" },
+        "**.amount": { type: "currency", options: { currency: "INR" } },
+        "**.status": { type: "enum", options: { map: { ACTIVE: "Active" } } },
+      }
+    }
+  ),
+  { sectionMap: { customer: "Customer Details" } }
+).sections;
+```
+
+---
+
 ## TypeScript Types
 
 All types are exported and fully documented. Import exactly what you need:
@@ -1882,6 +2195,17 @@ import type {
   TransformConfig,     // { type: "date"|"currency"|"boolean"|"enum"|... } | ValueTransformer
   TransformValuesConfig,
   TransformResult,     // { data: T, transformedPaths, defaultedPaths, computedPaths }
+
+  // ── v0.5.0 Structural Transformation types ────────────────
+  UnflattenOptions,
+  RemapOptions,
+  MergeDeepOptions,
+  ArrayMergeStrategy,  // "replace" | "concat" | "unique"
+  PivotOptions,
+  PivotDirection,      // "arrayToObject" | "objectToArray"
+  KeyCase,             // "camel" | "snake" | "pascal" | "kebab"
+  NormalizeKeysOptions,
+  StructureResult,     // { data: T, modifiedCount: number }
 } from '@heyblank-labs/json-flux';
 ```
 

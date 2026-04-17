@@ -32,9 +32,9 @@ function toNumber(value: unknown): number {
  * Uses `Intl.NumberFormat` for locale-aware formatting.
  *
  * @example
- * const fmt = createCurrencyFormatter({ currency: "INR", locale: "en-IN" });
- * fmt(1500)    // → "₹1,500.00"
- * fmt("1500")  // → "₹1,500.00"
+ * const fmt = createCurrencyFormatter({ currency: "GBP", locale: "en-GB" });
+ * fmt(1500)    // → "£1,500.00"
+ * fmt("1500")  // → "£1,500.00"
  * fmt("abc")   // → "—"
  */
 export function createCurrencyFormatter(
