@@ -6,7 +6,7 @@ A lightweight, TypeScript-first, framework-agnostic utility library for safely p
 
 [![npm version](https://img.shields.io/npm/v/@heyblank-labs/json-flux)](https://www.npmjs.com/package/@heyblank-labs/json-flux)
 [![license](https://img.shields.io/npm/l/@heyblank-labs/json-flux)](./LICENSE)
-[![tests](https://img.shields.io/badge/tests-744%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-820%20passing-brightgreen)]()
 [![coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)]()
 
 ---
@@ -65,6 +65,14 @@ A lightweight, TypeScript-first, framework-agnostic utility library for safely p
   - [pivotStructure](#pivotstructureinput-direction-options)
   - [normalizeKeys](#normalizekeysobj-options)
   - [convertKeyCase](#convertkeycasekey-targetcase)
+- [v0.6.0 — Masking & Security](#v060--masking--security)
+  - [maskSensitive](#masksensitiveobj-config)
+  - [redactKeys](#redactkeysobj-keys-options)
+  - [maskByPattern](#maskbypatternobj-config)
+  - [safeClone](#safecloneobj-options)
+  - [detectPii](#detectpiikey-value)
+  - [Masking Modes](#masking-modes)
+  - [Audit Trail](#audit-trail)
 - [TypeScript Types](#typescript-types)
 - [Edge Cases & Gotchas](#edge-cases--gotchas)
 - [Security](#security)
@@ -147,6 +155,7 @@ const fields = flattenSectionsToFields(sections);
 | **v0.3.0** | Released | Filtering & Visibility — `excludeKeys`, `includeKeys`, `hideIf`, `stripEmpty` |
 | **v0.4.0** | Released | Value Transformation — `transformValues`, formatters, computed fields, type detection |
 | **v0.5.0** | Released | Structural Transformation — `unflatten`, `remapObject`, `mergeDeep`, `pivotStructure`, `normalizeKeys` |
+| **v0.6.0** | Released | Masking & Security — `maskSensitive`, `redactKeys`, `maskByPattern`, `safeClone`, PII auto-detection |
 
 ---
 
@@ -2138,6 +2147,295 @@ const sections = normalizeToSections(
 
 ---
 
+## v0.6.0 — Masking & Security
+
+> Released · Detect, mask, redact, and audit sensitive PII data — safe for logs, API responses, and UI rendering without external security dependencies.
+
+---
+
+### `maskSensitive(obj, config?)`
+
+The primary masking engine. Masks sensitive fields using explicit paths, wildcard patterns, or auto-detection — in a single traversal pass.
+
+```ts
+import { maskSensitive, maskSensitiveDirect } from '@heyblank-labs/json-flux';
+
+// Explicit fields + partial masking
+maskSensitiveDirect({
+  user: { email: "alice@example.com", password: "secret123", name: "Alice" }
+}, {
+  fields: ["user.email", "user.password"],
+  mode: "partial",
+})
+// → { user: { email: "a***@example.com", password: "s*****3", name: "Alice" } }
+
+// Wildcard patterns — all passwords at any depth
+maskSensitiveDirect(data, { fields: ["**.password", "**.token"], mode: "full" })
+
+// Array items
+maskSensitiveDirect(data, { fields: ["users[*].ssn"], mode: "hash" })
+
+// Auto-detect all PII
+const { data, auditTrail, maskedCount } = maskSensitive(data, {
+  autoDetect: true,
+  mode: "full",
+  audit: true,
+})
+// auditTrail → [{ path: "user.email", action: "masked", mode: "full", category: "email" }, ...]
+
+// Custom masking function
+maskSensitiveDirect(data, {
+  fields: ["user.phone"],
+  mode: "custom",
+  customMask: (value) => `***-***-${value.slice(-4)}`,
+})
+```
+
+**`FieldMaskConfig`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `fields` | `string[]` | `[]` | Paths/keys/patterns to mask |
+| `mode` | `MaskMode` | `"full"` | Masking mode |
+| `customMask` | `CustomMaskFn` | — | Custom masking function (mode: "custom") |
+| `autoDetect` | `boolean` | `false` | Auto-detect PII by key and value |
+| `autoDetectThreshold` | `number` | `0.8` | Min confidence score (0–1) to trigger auto-mask |
+| `autoDetectCategories` | `PiiCategory[]` | — | Limit auto-detection to specific categories |
+| `audit` | `boolean` | `false` | Populate audit trail |
+| `maskChar` | `string` | `"*"` | Character used for full masking |
+| `maxDepth` | `number` | `20` | Recursion depth limit |
+
+---
+
+### Masking Modes
+
+| Mode | Input | Output |
+|---|---|---|
+| `"full"` | `alice@example.com` | `********` |
+| `"partial"` | `alice@example.com` | `a***@example.com` |
+| `"partial"` | `9876543210` | `***-***-3210` |
+| `"partial"` | `secret123` | `s******3` |
+| `"hash"` | `alice@example.com` | `a94a8fe5ccb19ba6...` |
+| `"custom"` | `9876543210` | `***-***-3210` (user-defined) |
+
+---
+
+### `redactKeys(obj, keys, options?)`
+
+Completely removes fields from an object — nothing is preserved, not even a masked placeholder.
+
+```ts
+import { redactKeys, redactKeysDirect } from '@heyblank-labs/json-flux';
+
+// Remove by explicit path
+redactKeysDirect(
+  { user: { name: "Alice", password: "secret", token: "abc" } },
+  ["user.password", "user.token"]
+)
+// → { user: { name: "Alice" } }
+
+// Wildcard glob
+redactKeysDirect(data, ["**.password", "**.apiKey", "**.secret"])
+
+// Auto-detect and remove all PII
+const { data, auditTrail } = redactKeys(data, [], {
+  autoDetect: true,
+  audit: true,
+})
+```
+
+---
+
+### `maskByPattern(obj, config)`
+
+Masks values in a JSON object that match user-supplied regex patterns.
+
+```ts
+import { maskByPattern, maskByPatternDirect } from '@heyblank-labs/json-flux';
+
+// Mask entire field when pattern matches
+maskByPatternDirect(data, {
+  patterns: {
+    email:  /[^\s@]+@[^\s@]+\.[^\s@]+/i,
+    phone:  /\d{10}/,
+    ssn:    /\d{3}-\d{2}-\d{4}/,
+  },
+  mode: "full",
+})
+
+// Replace only matched portions within a string
+maskByPatternDirect(
+  { notes: "Call alice@example.com or ring 9876543210" },
+  {
+    patterns: {
+      email: /[^\s@]+@[^\s@]+\.[^\s@]+/gi,
+      phone: /\d{10}/g,
+    },
+    mode: "full",
+    maskMatchOnly: true,
+  }
+)
+// → { notes: "Call ******** or ring ********" }
+```
+
+**`PatternMaskConfig`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `patterns` | `Record<string, RegExp>` | Required | Named patterns to match against |
+| `mode` | `MaskMode` | `"full"` | How matched values are masked |
+| `maskMatchOnly` | `boolean` | `false` | Replace only the matched portion |
+| `audit` | `boolean` | `false` | Populate audit trail |
+| `maskChar` | `string` | `"*"` | Character for full masking |
+
+---
+
+### `safeClone(obj, options?)`
+
+Creates a masked-safe deep clone — the original object is never modified. Combines `maskSensitive` + `redactKeys` in a single call.
+
+```ts
+import { safeClone, safeCloneDirect } from '@heyblank-labs/json-flux';
+
+// Mask email, redact password, keep everything else
+const { data, auditTrail, maskedCount } = safeClone(
+  { user: { email: "alice@example.com", password: "secret", name: "Alice" } },
+  {
+    maskFields:   ["user.email"],
+    redactFields: ["user.password"],
+    mode: "partial",
+  }
+)
+// data → { user: { email: "a***@example.com", name: "Alice" } }
+// (password gone entirely)
+
+// Auto-detect all PII
+safeCloneDirect(apiResponse, { autoDetect: true, mode: "full" })
+```
+
+**`SafeCloneOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `maskFields` | `string[]` | `[]` | Fields to mask |
+| `redactFields` | `string[]` | `[]` | Fields to remove entirely |
+| `mode` | `MaskMode` | `"full"` | Masking mode |
+| `autoDetect` | `boolean` | `false` | Auto-detect and protect all PII |
+| `maxDepth` | `number` | `20` | Recursion depth limit |
+
+---
+
+### `detectPii(key, value)`
+
+Detects whether a field contains sensitive/PII data, using both key-name heuristics and value pattern matching.
+
+```ts
+import { detectPii, isSensitiveKey } from '@heyblank-labs/json-flux';
+
+detectPii("email", "alice@example.com")
+// → { isSensitive: true, category: "email", confidence: 0.99, detectedByKey: true, detectedByValue: true }
+
+detectPii("data", "alice@example.com")
+// → { isSensitive: true, category: "email", confidence: 0.90, detectedByKey: false, detectedByValue: true }
+
+detectPii("name", "Alice Smith")
+// → { isSensitive: false, confidence: 0, ... }
+
+isSensitiveKey("apiKey")    // → true  (O(1) key lookup)
+isSensitiveKey("name")      // → false
+isSensitiveKey("API_KEY")   // → true  (normalised)
+```
+
+**Auto-detected PII categories:** `email` · `phone` · `password` · `token` · `apiKey` · `creditCard` · `ssn` · `ipAddress` · `uuid`
+
+**Detection confidence scores:**
+
+| Trigger | Confidence |
+|---|---|
+| Key only (exact match) | 0.90 – 0.97 |
+| Value only (regex match) | 0.70 – 0.90 |
+| Key + Value both match | Up to 0.99 |
+
+---
+
+### Audit Trail
+
+Every masking/redaction operation can produce an audit trail for compliance and debugging:
+
+```ts
+const { auditTrail } = maskSensitive(data, {
+  fields: ["user.email", "user.password"],
+  mode: "partial",
+  audit: true,
+})
+
+// auditTrail →
+// [
+//   { path: "user.email",    key: "email",    action: "masked",   mode: "partial", category: "email" },
+//   { path: "user.password", key: "password", action: "masked",   mode: "partial", category: "password" },
+// ]
+```
+
+**`AuditEntry` fields:**
+
+```ts
+interface AuditEntry {
+  path:       string;       // "user.email"
+  key:        string;       // "email"
+  action:     "masked" | "redacted" | "detected" | "skipped";
+  mode?:      MaskMode;     // present when action is "masked"
+  category?:  PiiCategory;  // present when PII category was detected
+  confidence?: number;       // 0–1, present for auto-detected fields
+}
+```
+
+---
+
+### `hashValue(input, length?)` / `hashValueSync(input, length?)`
+
+Cryptographic and sync fallback hashing for `"hash"` mode:
+
+```ts
+import { hashValue, hashValueSync } from '@heyblank-labs/json-flux';
+
+// Async SHA-256 (preferred, uses SubtleCrypto)
+const hash = await hashValue("alice@example.com", 40);
+// → "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3..."
+
+// Sync fallback (djb2-based, not cryptographically secure)
+hashValueSync("alice@example.com", 32);
+// → "d3e8a4f1..."
+```
+
+---
+
+### Full Security Pipeline
+
+```ts
+import {
+  deepSafeParse, removeNulls,
+  normalizeKeys,
+  safeCloneDirect,
+  normalizeToSections, flattenSectionsToFields,
+} from '@heyblank-labs/json-flux';
+
+// Production-safe API response pipeline
+const raw = await fetch('/api/user').then(r => r.json());
+
+const safeData = safeCloneDirect(
+  normalizeKeys(removeNulls(deepSafeParse(raw)), { case: "camel" }),
+  {
+    redactFields: ["**.password", "**.token", "**.secretKey"],
+    maskFields:   ["**.email", "**.phone", "**.ssn"],
+    mode: "partial",
+  }
+);
+
+// safeData is now safe to log, serialize, or pass to the UI layer
+```
+
+---
+
 ## TypeScript Types
 
 All types are exported and fully documented. Import exactly what you need:
@@ -2206,6 +2504,19 @@ import type {
   KeyCase,             // "camel" | "snake" | "pascal" | "kebab"
   NormalizeKeysOptions,
   StructureResult,     // { data: T, modifiedCount: number }
+
+  // ── v0.6.0 Masking & Security types ──────────────────────
+  MaskMode,            // "full" | "partial" | "hash" | "custom"
+  CustomMaskFn,        // (value, key, path) => string
+  PiiCategory,         // "email" | "phone" | "password" | "token" | ...
+  PiiDetectionResult,  // { isSensitive, category, confidence, ... }
+  AuditAction,         // "masked" | "redacted" | "detected" | "skipped"
+  AuditEntry,          // { path, key, action, mode?, category?, confidence? }
+  FieldMaskConfig,
+  MaskResult,          // { data: T, auditTrail, maskedCount }
+  PatternMaskConfig,
+  SafeCloneOptions,
+  RedactOptions,
 } from '@heyblank-labs/json-flux';
 ```
 

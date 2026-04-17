@@ -1,7 +1,5 @@
 // =============================================================================
-// index.ts — @heyblank-labs/json-flux v0.5.0 Public API
-//
-// Flow, shape, and transform JSON effortlessly.
+// index.ts — @heyblank-labs/json-flux v0.6.0 Public API
 // Tree-shakable: import only what you need.
 // =============================================================================
 
@@ -12,22 +10,8 @@ export { removeNulls, isEmpty } from "./core/clean.js";
 export { safeParse, deepSafeParse } from "./core/parse.js";
 export { collectAllKeys } from "./core/keys.js";
 export { extractField, hasField, parsePath } from "./core/extract.js";
-export {
-  createTraversalContext,
-  isPlainObject,
-  isUnsafeKey,
-  UNSAFE_KEYS,
-  DEFAULT_MAX_DEPTH,
-  DEFAULT_DELIMITER,
-} from "./core/traversal.js";
-export {
-  deepClone,
-  deepMerge,
-  deepEqual,
-  toSafeString,
-  omitKeys,
-  pickKeys,
-} from "./utils/helpers.js";
+export { createTraversalContext, isPlainObject, isUnsafeKey, UNSAFE_KEYS, DEFAULT_MAX_DEPTH, DEFAULT_DELIMITER } from "./core/traversal.js";
+export { deepClone, deepMerge, deepEqual, toSafeString, omitKeys, pickKeys } from "./utils/helpers.js";
 
 // ── v0.2.0 Labels & Sections ─────────────────────────────────────────────────
 export { toDisplayLabel, labelKeys, clearLabelCache } from "./transform/label.js";
@@ -62,37 +46,30 @@ export { pivotStructure, arrayToObject, objectToArray } from "./structure/pivot.
 export { normalizeKeys } from "./structure/normalizeKeys.js";
 export { convertKeyCase, convertKey, tokeniseKey, clearCaseCache } from "./utils/case.js";
 
-// ── v0.1.0 Types ──────────────────────────────────────────────────────────────
-export type {
-  JsonPrimitive, JsonObject, JsonArray, JsonValue, FlatRecord,
-  FlattenOptions, RemoveNullsOptions, SafeParseOptions,
-  CollectKeysOptions, ExtractOptions, FlattenResult, CollectKeysResult,
-} from "./types/index.js";
+// ── v0.6.0 Masking & Security ─────────────────────────────────────────────────
+export { maskSensitive, maskSensitiveDirect, applyMask } from "./security/mask.js";
+export { redactKeys, redactKeysDirect } from "./security/redact.js";
+export { maskByPattern, maskByPatternDirect } from "./security/pattern.js";
+export { safeClone, safeCloneDirect } from "./security/safeClone.js";
+export { detectPii, isSensitiveKey } from "./security/detect.js";
+export { hashValue, hashValueSync } from "./utils/crypto.js";
+
+// ── Types: v0.1.0 ─────────────────────────────────────────────────────────────
+export type { JsonPrimitive, JsonObject, JsonArray, JsonValue, FlatRecord, FlattenOptions, RemoveNullsOptions, SafeParseOptions, CollectKeysOptions, ExtractOptions, FlattenResult, CollectKeysResult } from "./types/index.js";
 export type { FlattenArrayResult } from "./core/array.js";
 
-// ── v0.2.0 Types ──────────────────────────────────────────────────────────────
-export type {
-  FieldType, Field, Section, CaseStyle, LabelOptions,
-  HumanizeOptions, SectionMapping, SectionConfig, NormalizationResult,
-} from "./types/section.types.js";
+// ── Types: v0.2.0 ─────────────────────────────────────────────────────────────
+export type { FieldType, Field, Section, CaseStyle, LabelOptions, HumanizeOptions, SectionMapping, SectionConfig, NormalizationResult } from "./types/section.types.js";
 
-// ── v0.3.0 Types ──────────────────────────────────────────────────────────────
-export type {
-  FilterPredicate, BaseFilterOptions, ExcludeOptions, IncludeOptions,
-  HideIfOptions, StripEmptyOptions, PathMatcher, PathMatcherOptions, FilterResult,
-} from "./types/filter.types.js";
+// ── Types: v0.3.0 ─────────────────────────────────────────────────────────────
+export type { FilterPredicate, BaseFilterOptions, ExcludeOptions, IncludeOptions, HideIfOptions, StripEmptyOptions, PathMatcher, PathMatcherOptions, FilterResult } from "./types/filter.types.js";
 
-// ── v0.4.0 Types ──────────────────────────────────────────────────────────────
-export type {
-  ValueTransformer, ComputedFieldFn, DetectedType, TypeDetectionResult,
-  DateFormatterOptions, CurrencyFormatterOptions, BooleanFormatterOptions,
-  NumberFormatterOptions, EnumMap, EnumFormatterOptions,
-  TransformConfig, TransformValuesConfig, TransformResult,
-} from "./types/value.types.js";
+// ── Types: v0.4.0 ─────────────────────────────────────────────────────────────
+export type { ValueTransformer, ComputedFieldFn, DetectedType, TypeDetectionResult, DateFormatterOptions, CurrencyFormatterOptions, BooleanFormatterOptions, NumberFormatterOptions, EnumMap, EnumFormatterOptions, TransformConfig, TransformValuesConfig, TransformResult } from "./types/value.types.js";
 
-// ── v0.5.0 Types ──────────────────────────────────────────────────────────────
-export type {
-  UnflattenOptions, RemapOptions, MergeDeepOptions,
-  ArrayMergeStrategy, PivotOptions, PivotDirection,
-  KeyCase, NormalizeKeysOptions, StructureResult,
-} from "./types/structure.types.js";
+// ── Types: v0.5.0 ─────────────────────────────────────────────────────────────
+export type { UnflattenOptions, RemapOptions, MergeDeepOptions, ArrayMergeStrategy, PivotOptions, PivotDirection, KeyCase, NormalizeKeysOptions, StructureResult } from "./types/structure.types.js";
+
+// ── Types: v0.6.0 ─────────────────────────────────────────────────────────────
+export type { MaskMode, CustomMaskFn, PiiCategory, PiiDetectionResult, AuditAction, AuditEntry, FieldMaskConfig, MaskResult, PatternMaskConfig, SafeCloneOptions } from "./types/security.types.js";
+export type { RedactOptions } from "./security/redact.js";
