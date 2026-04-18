@@ -1,5 +1,5 @@
 // =============================================================================
-// index.ts — @heyblank-labs/json-flux v0.6.0 Public API
+// index.ts — @heyblank-labs/json-flux v0.7.0 Public API
 // Tree-shakable: import only what you need.
 // =============================================================================
 
@@ -54,6 +54,10 @@ export { safeClone, safeCloneDirect } from "./security/safeClone.js";
 export { detectPii, isSensitiveKey } from "./security/detect.js";
 export { hashValue, hashValueSync } from "./utils/crypto.js";
 
+// ── v0.7.0 Export Layer ───────────────────────────────────────────────────────
+export { toCSV, toCsvString } from "./export/csv.js";
+export { toJSONSchema, toJSONSchemaFromSamples } from "./export/schema.js";
+
 // ── Types: v0.1.0 ─────────────────────────────────────────────────────────────
 export type { JsonPrimitive, JsonObject, JsonArray, JsonValue, FlatRecord, FlattenOptions, RemoveNullsOptions, SafeParseOptions, CollectKeysOptions, ExtractOptions, FlattenResult, CollectKeysResult } from "./types/index.js";
 export type { FlattenArrayResult } from "./core/array.js";
@@ -73,3 +77,6 @@ export type { UnflattenOptions, RemapOptions, MergeDeepOptions, ArrayMergeStrate
 // ── Types: v0.6.0 ─────────────────────────────────────────────────────────────
 export type { MaskMode, CustomMaskFn, PiiCategory, PiiDetectionResult, AuditAction, AuditEntry, FieldMaskConfig, MaskResult, PatternMaskConfig, SafeCloneOptions } from "./types/security.types.js";
 export type { RedactOptions } from "./security/redact.js";
+
+// ── Types: v0.7.0 ─────────────────────────────────────────────────────────────
+export type { CsvColumn, CsvOptions, CsvResult, JsonSchemaDraft, JsonSchemaOptions, JsonSchemaNode } from "./types/export.types.js";

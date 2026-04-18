@@ -7,7 +7,7 @@
 
   [![npm version](https://img.shields.io/npm/v/@heyblank-labs/json-flux)](https://www.npmjs.com/package/@heyblank-labs/json-flux)
   [![license](https://img.shields.io/npm/l/@heyblank-labs/json-flux)](./LICENSE)
-  [![tests](https://img.shields.io/badge/tests-820%20passing-brightgreen)]()
+  [![tests](https://img.shields.io/badge/tests-910%20passing-brightgreen)]()
   [![coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)]()
 </div>
 
@@ -75,6 +75,10 @@
   - [detectPii](#detectpiikey-value)
   - [Masking Modes](#masking-modes)
   - [Audit Trail](#audit-trail)
+- [v0.7.0 — Export Layer](#v070--export-layer-csv--json-schema)
+  - [toCSV](#tocsvdata-options)
+  - [toJSONSchema](#tojsonschemadata-options)
+  - [toJSONSchemaFromSamples](#tojsonschemafromsamplessamples-options)
 - [TypeScript Types](#typescript-types)
 - [Edge Cases & Gotchas](#edge-cases--gotchas)
 - [Security](#security)
@@ -158,6 +162,7 @@ const fields = flattenSectionsToFields(sections);
 | **v0.4.0** | Released | Value Transformation — `transformValues`, formatters, computed fields, type detection |
 | **v0.5.0** | Released | Structural Transformation — `unflatten`, `remapObject`, `mergeDeep`, `pivotStructure`, `normalizeKeys` |
 | **v0.6.0** | Released | Masking & Security — `maskSensitive`, `redactKeys`, `maskByPattern`, `safeClone`, PII auto-detection |
+| **v0.7.0** | Released | Export Layer — `toCSV`, `toCsvString`, `toJSONSchema`, `toJSONSchemaFromSamples` |
 
 ---
 
@@ -1071,8 +1076,6 @@ unescapeKey('name')   // → "name"
 
 ---
 
----
-
 ## v0.3.0 — Filtering & Visibility
 
 > Released · Fine-grained control over which fields appear in your JSON — by key name, dot-notation path, wildcard pattern, predicate function, or emptiness rules.
@@ -1843,8 +1846,6 @@ const sections = normalizeToSections(
 
 ---
 
----
-
 ## v0.5.0 — Structural Transformation
 
 > Released · Reshape, reconstruct, and standardize JSON structures — unflatten dot-notation records, remap paths, deep-merge with array strategies, pivot between arrays and objects, and normalize all keys to a consistent case format.
@@ -2438,6 +2439,252 @@ const safeData = safeCloneDirect(
 
 ---
 
+## v0.7.0 — Export Layer (CSV + JSON Schema)
+
+> Released · Convert JSON into CSV for reporting and Excel, or generate JSON Schema for API contracts and validation — with zero external dependencies.
+
+---
+
+### `toCSV(data, options?)`
+
+Converts an array of objects (or a single object) into a CSV string. Reuses `flattenObject` (v0.1.0) for nested objects and `toDisplayLabel` (v0.2.0) for auto-generated column headers.
+
+```ts
+import { toCSV, toCsvString } from '@heyblank-labs/json-flux';
+
+// Basic — auto-discovers all columns
+const { csv, rowCount, columns } = toCSV([
+  { name: "Alice", age: 30, city: "London" },
+  { name: "Bob",   age: 25, city: "Birmingham"  },
+]);
+// csv →
+// "Name,Age,City
+//  Alice,30,London
+//  Bob,25,Birmingham"
+
+// Nested objects are auto-flattened
+toCSV([
+  { user: { name: "Alice", address: { city: "London" } } },
+])
+// Header: "User.Name,User.Address.City"
+// Row:    "Alice,London"
+
+// Explicit columns with labels
+const { csv } = toCSV(data, {
+  columns: [
+    { key: "user.name",  label: "Full Name" },
+    { key: "user.email", label: "Email"     },
+    { key: "user.age",   label: "Age"       },
+  ],
+  delimiter: ";",
+});
+
+// Custom column transform
+toCSV(data, {
+  columns: [{
+    key: "user.salary",
+    label: "Salary",
+    transform: (v) => `$${Number(v).toLocaleString()}`,
+  }],
+});
+
+// Default value for missing fields
+toCSV(data, {
+  columns: [{ key: "user.phone", label: "Phone", defaultValue: "N/A" }],
+});
+
+// Tab-delimited (Excel-friendly)
+toCsvString(data, { delimiter: "\t" });
+```
+
+**`CsvOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `columns` | `CsvColumn[]` | — | Column definitions. Auto-discovered when omitted. |
+| `delimiter` | `string` | `","` | Field delimiter |
+| `lineBreak` | `"\n" \| "\r\n"` | `"\n"` | Row terminator |
+| `includeHeader` | `boolean` | `true` | Emit header row |
+| `humanizeHeaders` | `boolean` | `true` | Use `toDisplayLabel` for auto-generated headers |
+| `preventInjection` | `boolean` | `true` | Prefix `=`, `+`, `-`, `@` values with `'` |
+| `quoteChar` | `string` | `'"'` | Quote character for RFC-4180 escaping |
+| `flatten` | `boolean` | `true` | Flatten nested objects to dot-notation columns |
+| `maxDepth` | `number` | `20` | Flatten depth limit |
+
+**Security — CSV injection prevention:**
+
+```ts
+// Dangerous formula values are automatically neutralised
+toCSV([{ formula: "=SUM(A1:A10)" }])
+// → "'=SUM(A1:A10)"  (OWASP-recommended prefix)
+```
+
+Values starting with `=`, `+`, `-`, `@`, `\t`, `\r` are prefixed with `'` to prevent spreadsheet formula execution. Disable with `preventInjection: false`.
+
+**RFC-4180 escaping:**
+
+- Fields containing the delimiter, quote char, or newlines are wrapped in `quoteChar`.
+- Internal quote chars are doubled: `"He said "hi""` → `"He said ""hi"""`
+- Newlines inside values are normalised to spaces.
+
+**`CsvResult`:**
+
+```ts
+{
+  csv:      string;            // the complete CSV string
+  rowCount: number;            // data rows (excluding header)
+  columns:  readonly string[]; // column keys in output order
+}
+```
+
+---
+
+### `toJSONSchema(data, options?)`
+
+Generates a JSON Schema from any JSON value. Infers types, detects string formats (email, date, UUID…), and supports draft-07, 2019-09, and 2020-12.
+
+```ts
+import { toJSONSchema, toJSONSchemaFromSamples } from '@heyblank-labs/json-flux';
+
+// Basic schema generation
+toJSONSchema({
+  name: "Alice",
+  age: 30,
+  active: true,
+  email: "alice@example.com",
+  dob: "1990-01-15",
+})
+// →
+// {
+//   "$schema": "http://json-schema.org/draft-07/schema#",
+//   "type": "object",
+//   "properties": {
+//     "name":   { "type": "string" },
+//     "age":    { "type": "integer" },
+//     "active": { "type": "boolean" },
+//     "email":  { "type": "string", "format": "email" },
+//     "dob":    { "type": "string", "format": "date" }
+//   }
+// }
+
+// With required fields and title
+toJSONSchema(data, { required: true, title: "User Schema" })
+
+// Strict mode — no additional properties
+toJSONSchema(data, { strict: true })
+
+// Draft version
+toJSONSchema(data, { draft: "draft-2020-12" })
+
+// With example values included
+toJSONSchema(data, { includeExamples: true })
+```
+
+**Type inference:**
+
+| Value | Inferred type |
+|---|---|
+| `"Alice"` | `string` |
+| `30` | `integer` |
+| `3.14` | `number` |
+| `true` / `false` | `boolean` |
+| `null` | `null` |
+| `[...]` | `array` |
+| `{...}` | `object` |
+
+**Format detection** (for string values):
+
+| Value example | `format` |
+|---|---|
+| `"2024-01-15T10:30:00Z"` | `date-time` |
+| `"2024-01-15"` | `date` |
+| `"alice@example.com"` | `email` |
+| `"https://example.com"` | `uri` |
+| `"550e8400-e29b-41d4-..."` | `uuid` |
+
+**`JsonSchemaOptions`:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `draft` | `"draft-07" \| "draft-2019-09" \| "draft-2020-12"` | `"draft-07"` | Schema draft version |
+| `required` | `boolean` | `false` | Add non-null fields to `required` |
+| `strict` | `boolean` | `false` | Add `"additionalProperties": false` |
+| `mergeArrayItems` | `boolean` | `true` | Merge schemas from all array items |
+| `includeExamples` | `boolean` | `false` | Include sample values in `examples` |
+| `title` | `string` | — | Root schema title |
+| `description` | `string` | — | Root schema description |
+| `maxDepth` | `number` | `20` | Recursion depth limit |
+
+---
+
+### `toJSONSchemaFromSamples(samples, options?)`
+
+Generates a merged schema from multiple sample objects — useful for datasets where different records may have different optional fields.
+
+```ts
+// Merge schemas from all API response samples
+const schema = toJSONSchemaFromSamples([
+  { id: 1, name: "Alice", role: "admin" },
+  { id: 2, name: "Bob",   email: "bob@test.com" },
+  { id: 3, name: "Carol", role: "user", age: 25 },
+], { required: true, title: "User" });
+
+// Merged schema includes: id, name, role, email, age
+// required: only fields present in ALL samples → ["id", "name"]
+```
+
+---
+
+### Real-World Export Pipelines
+
+```ts
+import {
+  deepSafeParse, removeNulls,
+  normalizeKeys,
+  excludeKeysDirect,
+  transformValuesDirect,
+  maskSensitiveDirect,
+  toCSV, toJSONSchema,
+} from '@heyblank-labs/json-flux';
+
+// ── Excel report from API data ─────────────────────────────────────────────
+const raw = await fetch('/api/orders').then(r => r.json());
+
+const report = toCSV(
+  transformValuesDirect(
+    maskSensitiveDirect(
+      normalizeKeys(removeNulls(deepSafeParse(raw)), { case: "camel" }),
+      { fields: ["**.ssn", "**.creditCard"], mode: "full" }
+    ),
+    {
+      transforms: {
+        dob:    { type: "date",     options: { format: "DD MMM YYYY" } },
+        amount: { type: "currency", options: { currency: "USD" } },
+        status: { type: "enum",     options: { map: { PENDING: "Pending", APPROVED: "Approved" } } },
+      }
+    }
+  ),
+  {
+    columns: [
+      { key: "orderId",     label: "Order ID"    },
+      { key: "customerName",label: "Customer"    },
+      { key: "amount",      label: "Amount"      },
+      { key: "status",      label: "Status"      },
+      { key: "dob",         label: "Created At"  },
+    ],
+    delimiter: "\t",  // Tab = paste directly into Excel
+  }
+);
+
+// ── API contract schema generation ────────────────────────────────────────
+const apiSchema = toJSONSchema(
+  excludeKeysDirect(sampleResponse, ["**.password", "**.token"]),
+  { required: true, title: "OrderResponse", draft: "draft-2020-12" }
+);
+```
+
+---
+
 ## TypeScript Types
 
 All types are exported and fully documented. Import exactly what you need:
@@ -2519,6 +2766,14 @@ import type {
   PatternMaskConfig,
   SafeCloneOptions,
   RedactOptions,
+
+  // ── v0.7.0 Export types ───────────────────────────────────
+  CsvColumn,
+  CsvOptions,
+  CsvResult,
+  JsonSchemaDraft,     // "draft-07" | "draft-2019-09" | "draft-2020-12"
+  JsonSchemaOptions,
+  JsonSchemaNode,
 } from '@heyblank-labs/json-flux';
 ```
 

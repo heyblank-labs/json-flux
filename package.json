@@ -1,6 +1,6 @@
 {
   "name": "@heyblank-labs/json-flux",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Flow, shape, and transform JSON effortlessly",
   "keywords": [
     "json",
