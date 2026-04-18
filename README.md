@@ -1,13 +1,15 @@
-# @heyblank-labs/json-flux
+<div>
+  <img src="https://raw.githubusercontent.com/heyblank-labs/json-flux/main/assets/brand/json-flux-logo.png"
+       alt="json-flux"
+       width="250" />
 
-> **Flow, shape, and transform JSON effortlessly.**
+  A lightweight, TypeScript-first, framework-agnostic utility library for safely processing deeply nested JSON structures. Zero runtime dependencies. Tree-shakable. Runs anywhere — Node.js, browser, and all SSR environments.
 
-A lightweight, TypeScript-first, framework-agnostic utility library for safely processing deeply nested JSON structures. Zero runtime dependencies. Tree-shakable. Runs anywhere — Node.js, browser, and all SSR environments.
-
-[![npm version](https://img.shields.io/npm/v/@heyblank-labs/json-flux)](https://www.npmjs.com/package/@heyblank-labs/json-flux)
-[![license](https://img.shields.io/npm/l/@heyblank-labs/json-flux)](./LICENSE)
-[![tests](https://img.shields.io/badge/tests-820%20passing-brightgreen)]()
-[![coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)]()
+  [![npm version](https://img.shields.io/npm/v/@heyblank-labs/json-flux)](https://www.npmjs.com/package/@heyblank-labs/json-flux)
+  [![license](https://img.shields.io/npm/l/@heyblank-labs/json-flux)](./LICENSE)
+  [![tests](https://img.shields.io/badge/tests-820%20passing-brightgreen)]()
+  [![coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)]()
+</div>
 
 ---
 
