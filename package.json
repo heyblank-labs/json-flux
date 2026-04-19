@@ -1,6 +1,6 @@
 {
   "name": "@heyblank-labs/json-flux",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Flow, shape, and transform JSON effortlessly",
   "keywords": [
     "json",
@@ -34,7 +34,11 @@
     "dot notation",
     "json path",
     "data transformation",
-    "include exclude"
+    "include exclude",
+    "blank",
+    "hey",
+    "@heyblank-labs",
+    "json-flux"
   ],
   "author": "Asraf Ali <heyblank.hq@gmail.com>",
   "contributors": [

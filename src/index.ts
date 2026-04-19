@@ -80,3 +80,16 @@ export type { RedactOptions } from "./security/redact.js";
 
 // ── Types: v0.7.0 ─────────────────────────────────────────────────────────────
 export type { CsvColumn, CsvOptions, CsvResult, JsonSchemaDraft, JsonSchemaOptions, JsonSchemaNode } from "./types/export.types.js";
+
+// ── v0.8.0 Query, Search & Aggregation ───────────────────────────────────────
+export { from, QueryBuilder } from "./query/builder.js";
+export { search, searchAny } from "./query/search.js";
+export { queryPath, get, getAll } from "./query/jsonpath.js";
+export { groupBy, sum, avg, min, max, distinct } from "./query/aggregate.js";
+export { compilePathPredicate } from "./query/where.js";
+
+// ── Types: v0.8.0 ─────────────────────────────────────────────────────────────
+export type {
+  WhereOperator, WherePredicate, KeySelector, Projector,
+  GroupResult, SearchMatch, SearchOptions, JsonPathResult, QueryResult,
+} from "./types/query.types.js";

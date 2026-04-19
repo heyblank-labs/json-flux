@@ -7,7 +7,7 @@
 
   [![npm version](https://img.shields.io/npm/v/@heyblank-labs/json-flux)](https://www.npmjs.com/package/@heyblank-labs/json-flux)
   [![license](https://img.shields.io/npm/l/@heyblank-labs/json-flux)](./LICENSE)
-  [![tests](https://img.shields.io/badge/tests-910%20passing-brightgreen)]()
+  [![tests](https://img.shields.io/badge/tests-1042%20passing-brightgreen)]()
   [![coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)]()
 </div>
 
@@ -79,6 +79,15 @@
   - [toCSV](#tocsvdata-options)
   - [toJSONSchema](#tojsonschemadata-options)
   - [toJSONSchemaFromSamples](#tojsonschemafromsamplessamples-options)
+- [v0.8.0 — Query, Search & Aggregation](#v080--query-search--aggregation)
+  - [from](#fromdata--entry-point)
+  - [where](#where--filtering)
+  - [select / selectMany](#select--projection)
+  - [orderBy / orderByDesc](#orderby--orderbydesс--sorting)
+  - [take / skip](#take--skip--pagination)
+  - [search](#search--full-text-keyword-filter)
+  - [get / getAll / queryPath](#get--getall--querypath--jsonpath)
+  - [groupBy / sum / avg / min / max / distinct](#groupby--grouping--aggregation)
 - [TypeScript Types](#typescript-types)
 - [Edge Cases & Gotchas](#edge-cases--gotchas)
 - [Security](#security)
@@ -163,6 +172,7 @@ const fields = flattenSectionsToFields(sections);
 | **v0.5.0** | Released | Structural Transformation — `unflatten`, `remapObject`, `mergeDeep`, `pivotStructure`, `normalizeKeys` |
 | **v0.6.0** | Released | Masking & Security — `maskSensitive`, `redactKeys`, `maskByPattern`, `safeClone`, PII auto-detection |
 | **v0.7.0** | Released | Export Layer — `toCSV`, `toCsvString`, `toJSONSchema`, `toJSONSchemaFromSamples` |
+| **v0.8.0** | Released | Query, Search & Aggregation — `from`, `where`, `groupBy`, `search`, `queryPath`, `get` |
 
 ---
 
@@ -2685,6 +2695,255 @@ const apiSchema = toJSONSchema(
 
 ---
 
+## v0.8.0 — Query, Search & Aggregation
+
+> Released · A lightweight LINQ-style data engine for JSON — query, filter, sort, paginate, search, and aggregate with a fully lazy chainable API.
+
+---
+
+### `from(data)` — entry point
+
+```ts
+import { from } from '@heyblank-labs/json-flux';
+
+from(users)
+  .where(x => x.active)
+  .orderByDesc(x => x.salary)
+  .take(10)
+  .select(x => ({ name: x.name, salary: x.salary }))
+  .toArray()
+```
+
+`from()` creates a lazy `QueryBuilder<T>`. Nothing executes until a terminal method is called.
+
+---
+
+### `where()` — filtering
+
+Supports both predicate functions and path-operator-value triples:
+
+```ts
+// Function predicate
+.where(x => x.age > 25)
+.where(x => x.status === "ACTIVE" && x.country === "IN")
+
+// Path-operator-value
+.where("age", ">", 25)
+.where("status", "eq", "ACTIVE")
+.where("country", "in", ["IN", "US"])
+.where("name", "contains", "ali")
+```
+
+**Supported operators:**
+
+| Operator | Aliases | Description |
+|---|---|---|
+| `"eq"` | `"="`, `"=="` | Strict equality |
+| `"ne"` | `"!="` | Not equal |
+| `"gt"` | `">"` | Greater than |
+| `"gte"` | `">="` | Greater than or equal |
+| `"lt"` | `"<"` | Less than |
+| `"lte"` | `"<="` | Less than or equal |
+| `"in"` | — | Value exists in array |
+| `"contains"` | — | String/array contains value |
+
+Multiple `.where()` calls are ANDed together.
+
+---
+
+### `select()` — projection
+
+```ts
+// Function projection
+.select(x => ({ name: x.user.name, age: x.user.age }))
+
+// Path array
+.select(["user.name", "user.email"])
+```
+
+---
+
+### `selectMany()` — flatten nested arrays
+
+```ts
+from(departments)
+  .selectMany(d => d.employees)
+  .where(e => e.active)
+  .toArray()
+```
+
+---
+
+### `orderBy()` / `orderByDesc()` — sorting
+
+```ts
+.orderBy(x => x.name)          // ascending
+.orderByDesc(x => x.salary)    // descending
+```
+
+---
+
+### `take()` / `skip()` — pagination
+
+```ts
+.skip(20).take(10)   // page 3 of 10-per-page results
+```
+
+---
+
+### `search()` — full-text keyword filter
+
+Filters items containing the keyword anywhere in their structure:
+
+```ts
+.search("alice")                     // single keyword
+.search(["alice", "bob"])            // OR match
+.search("admin", { limit: 5 })       // stop after 5 matches
+```
+
+---
+
+### Terminal operations
+
+| Method | Returns | Description |
+|---|---|---|
+| `.toArray()` | `T[]` | Execute and return all results |
+| `.first()` | `T \| undefined` | First item |
+| `.last()` | `T \| undefined` | Last item |
+| `.count()` | `number` | Item count |
+| `.any()` | `boolean` | True if any results exist |
+| `.all(pred)` | `boolean` | True if all items satisfy predicate |
+| `.sum(sel)` | `number` | Sum of selector values |
+| `.avg(sel)` | `number` | Arithmetic mean |
+| `.min(sel)` | `number` | Minimum value |
+| `.max(sel)` | `number` | Maximum value |
+| `.distinct(sel)` | `K[]` | Unique selector values |
+| `.groupBy(sel)` | `GroupResult<K,T>[]` | Grouped results |
+
+---
+
+### `groupBy()` — grouping & aggregation
+
+```ts
+// Via builder
+from(orders)
+  .where(x => x.active)
+  .groupBy(x => x.country)
+// → [{ key: "IN", items: [...], count: 3 }, ...]
+
+// Combined: group then sum
+const byCountry = from(users).groupBy(x => x.country);
+byCountry.forEach(group => {
+  console.log(group.key, sum(group.items, x => x.salary));
+});
+```
+
+---
+
+### Standalone aggregation functions
+
+```ts
+import { groupBy, sum, avg, min, max, distinct } from '@heyblank-labs/json-flux';
+
+sum(users, u => u.salary)         // → 445000
+avg(users, u => u.age)            // → 29.3
+min(users, u => u.age)            // → 19
+max(users, u => u.salary)         // → 120000
+distinct(users, u => u.country)   // → ["IN", "US", "UK"]
+groupBy(users, u => u.role)       // → [{ key: "admin", ... }, ...]
+```
+
+---
+
+### `search()` — standalone deep search
+
+```ts
+import { search, searchAny } from '@heyblank-labs/json-flux';
+
+// Returns all matching paths + values
+search({ user: { name: "Alice", city: "London" } }, "alice")
+// → [{ path: "user.name", key: "name", value: "Alice", keyword: "alice" }]
+
+// Multiple keywords (OR)
+search(data, ["alice", "bob"])
+
+// Whole-word match
+search(data, "ali", { wholeWord: true })  // won't match "alice"
+
+// Limit results
+search(data, "admin", { limit: 5 })
+
+// Quick existence check
+searchAny(data, "alice")  // → true/false
+```
+
+---
+
+### `get()` / `getAll()` / `queryPath()` — JSONPath
+
+```ts
+import { get, getAll, queryPath } from '@heyblank-labs/json-flux';
+
+// Single value
+get(data, "user.name")            // → "Alice"
+get(data, "users[0].email")       // → "alice@test.com"
+get(data, "users[*].name")        // → "Alice" (first match)
+get(data, "**.id")                // → 1 (first found)
+
+// All matching values
+getAll(data, "users[*].name")     // → ["Alice", "Bob", "Carol"]
+getAll(data, "**.id")             // → [1, 2, 3, 99]
+
+// Full match results with paths
+queryPath(data, "users[*].address.city")
+// → [
+//   { value: "London", path: "users.0.address.city" },
+//   { value: "Birmingham",  path: "users.1.address.city" },
+// ]
+```
+
+**Supported patterns:**
+
+| Pattern | Description |
+|---|---|
+| `"user.name"` | Exact dot-notation path |
+| `"users[0].name"` | Array index |
+| `"users[*].name"` | All array items |
+| `"*.name"` | All children at one level |
+| `"**.id"` | Deep glob — any depth |
+| `"users[*].address.city"` | Nested after wildcard |
+
+---
+
+### Full LINQ pipelines
+
+```ts
+import { from, sum, toCSV, maskSensitiveDirect } from '@heyblank-labs/json-flux';
+
+// Filter → sort → paginate → aggregate
+const totalTopSalaries = from(employees)
+  .where(x => x.active)
+  .orderByDesc(x => x.salary)
+  .take(10)
+  .sum(x => x.salary);
+
+// Group → count per group
+const byCountry = from(users)
+  .where(x => x.age >= 18)
+  .groupBy(x => x.country);
+
+// Mask sensitive data → query → export
+const csv = toCSV(
+  from(maskSensitiveDirect(users, { fields: ["**.email"], mode: "full" }))
+    .where(x => x.active)
+    .orderBy(x => x.name)
+    .toArray(),
+  { columns: [{ key: "name", label: "Name" }, { key: "salary", label: "Salary" }] }
+).csv;
+```
+
+---
+
 ## TypeScript Types
 
 All types are exported and fully documented. Import exactly what you need:
@@ -2774,6 +3033,17 @@ import type {
   JsonSchemaDraft,     // "draft-07" | "draft-2019-09" | "draft-2020-12"
   JsonSchemaOptions,
   JsonSchemaNode,
+
+  // ── v0.8.0 Query, Search & Aggregation types ─────────────
+  WhereOperator,       // "eq"|"ne"|"gt"|"gte"|"lt"|"lte"|"in"|"contains"|">"...
+  WherePredicate,      // (item: T, index: number) => boolean
+  KeySelector,         // (item: T) => K
+  Projector,           // (item: T, index: number) => R
+  GroupResult,         // { key: K, items: T[], count: number }
+  SearchMatch,         // { path, key, value, keyword }
+  SearchOptions,
+  JsonPathResult,      // { value: unknown, path: string }
+  QueryResult,
 } from '@heyblank-labs/json-flux';
 ```
 
@@ -2826,6 +3096,10 @@ All traversals are O(n) in the number of nodes.
 | `transformValues` | 1,000-item array | < 300ms |
 | `formatDate` | repeated calls | O(1) — month names cached per locale |
 | `formatCurrency` | repeated calls | O(1) — `Intl.NumberFormat` cached per config |
+| `normalizeKeys` | 1,000-key object | < 100ms |
+| `from().where().sum()` | 50,000 items | < 200ms |
+| `search()` | 1,000 items | < 100ms |
+| `toCSV()` | 5,000 rows | < 500ms |
 
 **Label memoisation:** `toDisplayLabel` caches results in an LRU cache (2,000 entries, keyed by key + options fingerprint). Repeated calls for the same key are O(1) with zero re-processing.
 
